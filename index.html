@@ -141,6 +141,15 @@ input.count { width: 76px; }
 .rank .n { font-variant-numeric: tabular-nums; color: var(--muted); white-space: nowrap; }
 .rank .item { min-width: 0; overflow-wrap: anywhere; }
 
+/* 体制 */
+.lineup-card { border: 1px solid var(--line); border-radius: var(--r); padding: 12px; display: flex; flex-direction: column; gap: 8px; background: var(--surface); }
+.lineup-card .head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.lineup-card .lname { font-family: var(--f-display); font-weight: 700; font-size: 1.05rem; }
+.lineup-card .period { color: var(--muted); font-size: 0.82rem; font-variant-numeric: tabular-nums; }
+.chip.off { background: var(--surface-2); color: var(--muted); text-decoration: line-through; }
+.chip.plain { padding-right: 12px; }
+.manage-wide { grid-column: 1 / -1; }
+h4 { margin: 0; font-size: 0.88rem; color: var(--muted); letter-spacing: 0.03em; }
 /* 候補 */
 .cand { list-style: none; margin: 0; padding: 0; max-height: 220px; overflow-y: auto; }
 .cand li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--line); font-size: 0.92rem; }
@@ -217,15 +226,20 @@ input.count { width: 76px; }
       </div>
 
       <div class="panel inset">
-        <div class="row" style="justify-content:space-between;align-items:center">
-          <h3>出演メンバー</h3>
-          <button type="button" id="addAllMembersBtn" class="btn sm">グループの全員を追加</button>
+        <h3>体制・出演メンバー</h3>
+        <div>
+          <label class="lbl" for="lineupSelect">体制</label>
+          <select id="lineupSelect" class="field"><option value="">先にグループを入力してください</option></select>
         </div>
+        <p id="lineupHint" class="hint"></p>
         <div id="memberChips" class="chips"></div>
-        <div class="row">
-          <div class="grow"><input id="memberInput" class="field" placeholder="メンバー名（一部で候補表示）"></div>
-          <button type="button" id="addMemberBtn" class="btn">追加</button>
-        </div>
+        <details>
+          <summary class="hint" style="cursor:pointer">メンバーを1人ずつ追加する（ゲスト・代役など）</summary>
+          <div class="row" style="margin-top:8px">
+            <div class="grow"><input id="memberInput" class="field" placeholder="メンバー名（一部で候補表示）"></div>
+            <button type="button" id="addMemberBtn" class="btn">追加</button>
+          </div>
+        </details>
       </div>
 
       <div><label class="lbl" for="liveCostume">衣装</label><input id="liveCostume" class="field" placeholder="一部を入力すると候補が出ます"></div>
@@ -264,6 +278,7 @@ input.count { width: 76px; }
       <div class="grid2">
         <div><label class="lbl" for="yearFilter">年</label><select id="yearFilter" class="field"><option value="all">すべて</option></select></div>
         <div><label class="lbl" for="groupFilter">グループ</label><select id="groupFilter" class="field"><option value="all">すべて</option></select></div>
+        <div class="lineup-filter" hidden><label class="lbl" for="lineupFilter">体制</label><select id="lineupFilter" class="field"><option value="all">すべて</option></select></div>
         <div><label class="lbl" for="sortOrder">並び順</label><select id="sortOrder" class="field"><option value="desc">新しい順</option><option value="asc">古い順</option></select></div>
       </div>
       <div class="stats">
@@ -291,16 +306,18 @@ input.count { width: 76px; }
   <!-- ========== ランキング ========== -->
   <section class="tab" id="tab-ranking" hidden>
     <div class="panel">
-      <p class="hint">年・グループで絞り込んで集計します（「ライブ一覧」の絞り込みと連動）。</p>
+      <p class="hint">年・グループ・体制で絞り込んで集計します（「ライブ一覧」の絞り込みと連動）。</p>
       <div class="grid2">
         <div><label class="lbl" for="yearFilter2">年</label><select id="yearFilter2" class="field"></select></div>
         <div><label class="lbl" for="groupFilter2">グループ</label><select id="groupFilter2" class="field"></select></div>
+        <div class="lineup-filter" hidden><label class="lbl" for="lineupFilter2">体制</label><select id="lineupFilter2" class="field"></select></div>
       </div>
     </div>
     <div class="cards">
       <div class="panel"><h3>セットリスト</h3><ol id="setlistRanking" class="rank"></ol></div>
       <div class="panel"><h3>会場</h3><ol id="venueRanking" class="rank"></ol></div>
       <div class="panel"><h3>衣装</h3><ol id="costumeRanking" class="rank"></ol></div>
+      <div class="panel"><h3>体制別ライブ数</h3><ol id="lineupRanking" class="rank"></ol></div>
       <div class="panel"><h3>メンバー出演</h3><ol id="memberRanking" class="rank"></ol></div>
       <div class="panel"><h3>チェキ相手</h3><ol id="chekiRanking" class="rank"></ol></div>
     </div>
@@ -309,6 +326,42 @@ input.count { width: 76px; }
   <!-- ========== 候補の管理 ========== -->
   <section class="tab" id="tab-manage" hidden>
     <p class="hint">ここに登録した候補は、入力欄で文字の一部を打つと表示されます。ライブで使った項目は自動で候補に入ります。</p>
+    <div class="panel" id="lineupManage">
+      <h2>グループ・体制・メンバー</h2>
+      <div><label class="lbl" for="lmGroup">グループ</label><select id="lmGroup" class="field"><option value="">グループを選択…</option></select></div>
+      <div id="lmBody" class="grid2" hidden>
+        <div class="panel inset">
+          <h3>メンバー</h3>
+          <div id="lmMembers" class="chips"></div>
+          <div class="row"><div class="grow"><input id="lmMemberIn" class="field" placeholder="名前（「、」区切りで複数可）"></div><button type="button" id="lmMemberAdd" class="btn">追加</button></div>
+        </div>
+        <div class="panel inset">
+          <h3>体制</h3>
+          <div id="lmLineups" style="display:flex;flex-direction:column;gap:10px"></div>
+        </div>
+        <div class="panel inset manage-wide" id="lmForm">
+          <h3 id="lmFormTitle">体制を追加</h3>
+          <div class="grid2">
+            <div><label class="lbl" for="lmStart">開始日（任意）</label><input type="date" id="lmStart" class="field"></div>
+            <div><label class="lbl" for="lmEnd">終了日（任意・現在も続くなら空欄）</label><input type="date" id="lmEnd" class="field"></div>
+          </div>
+          <div>
+            <label class="lbl" for="lmPickIn">メンバー</label>
+            <div id="lmPicked" class="chips" style="margin-bottom:8px"></div>
+            <div class="row">
+              <div class="grow"><input id="lmPickIn" class="field" placeholder="名前の一部を入力すると候補が出ます"></div>
+              <button type="button" id="lmPickAdd" class="btn">追加</button>
+              <button type="button" id="lmPickAll" class="btn">メンバー全員</button>
+            </div>
+          </div>
+          <p id="lmPreview" class="hint"></p>
+          <div class="actions">
+            <button type="button" id="lmSave" class="btn primary">体制を保存</button>
+            <button type="button" id="lmCancel" class="btn" hidden>編集をやめる</button>
+          </div>
+        </div>
+      </div>
+    </div>
     <div class="cards" id="globalManage"></div>
     <div class="cards" id="scopedManage"></div>
   </section>
@@ -380,14 +433,18 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   let cand = emptyCandidates();      // 保存されている候補
   let view = emptyCandidates();      // 保存候補 ＋ ライブデータから集めた候補（表示用）
   let currentCheki = [], currentMembers = [];
-  let editingId = null, fYear = 'all', fGroup = 'all', sortOrder = 'desc';
+  let currentLineup = '', lineupManual = false;
+  let editingId = null, fYear = 'all', fGroup = 'all', fLineup = 'all', sortOrder = 'desc';
+  let lineupMap = new Map();        // key → 体制（名前・期間付き）
+  let liveLineup = new Map();       // ライブID → 体制key
 
   function emptyCandidates() {
-    return { venues: new Set(), groups: new Set(), liveTypes: new Set(DEFAULT_TYPES), member: new Map(), song: new Map(), costume: new Map(), cheki: new Map() };
+    return { venues: new Set(), groups: new Set(), liveTypes: new Set(DEFAULT_TYPES), member: new Map(), song: new Map(), costume: new Map(), cheki: new Map(), lineups: [] };
   }
   function candToJSON(c) {
     const o = { venues: [...c.venues], groups: [...c.groups], liveTypes: [...c.liveTypes] };
     KINDS.forEach(k => { o[k] = {}; c[k].forEach((set, g) => { o[k][g] = [...set]; }); });
+    o.lineups = c.lineups.map(l => ({ group: l.group, members: [...l.members], start: l.start || '', end: l.end || '' }));
     return o;
   }
   function candFromJSON(o) {
@@ -396,6 +453,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     c.venues = new Set(o.venues || []); c.groups = new Set(o.groups || []);
     c.liveTypes = new Set(o.liveTypes && o.liveTypes.length ? o.liveTypes : DEFAULT_TYPES);
     KINDS.forEach(k => Object.entries(o[k] || {}).forEach(([g, items]) => c[k].set(g, new Set(items))));
+    c.lineups = Array.isArray(o.lineups) ? o.lineups.map(l => ({ group: l.group, members: [...(l.members || [])], start: l.start || '', end: l.end || '' })) : [];
     return c;
   }
   function addTo(c, kind, group, item) {
@@ -420,6 +478,66 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       (d.chekiDetails || []).forEach(c => addTo(view, 'cheki', g, c.name));
       (d.members || []).forEach(m => addTo(view, 'member', g, m));
     });
+    buildLineups();
+  }
+
+  // ================= 体制 =================
+  // 体制は「グループ＋メンバー構成」で1つ。名前は「〇人体制（メンバー名、…）」
+  const lineupKey = (group, members) => String(group || '').trim() + '::' + [...new Set((members || []).map(m => String(m).trim()).filter(Boolean))].sort().join('|');
+  const fmtDate = s => s ? s.replace(/^(\d{4})-0?(\d{1,2})-0?(\d{1,2})$/, '$1/$2/$3') : '';
+  function buildLineups() {
+    const map = new Map();
+    view.lineups.forEach(l => {
+      const key = lineupKey(l.group, l.members);
+      if (!map.has(key)) map.set(key, { group: l.group, members: [...l.members], start: l.start || '', end: l.end || '', key, defined: true, first: '', last: '', count: 0 });
+    });
+    liveLineup = new Map();
+    liveData.forEach(d => {
+      let key = d.lineup && map.has(d.lineup) ? d.lineup : '';
+      if (!key && d.lineup) { // 候補から消された体制でもライブで使われていれば残す
+        const [g, ms] = d.lineup.split('::');
+        map.set(d.lineup, { group: g, members: ms ? ms.split('|') : [], start: '', end: '', key: d.lineup, defined: false, first: '', last: '', count: 0 });
+        key = d.lineup;
+      }
+      if (!key && d.members && d.members.length) { const k = lineupKey(d.group, d.members); if (map.has(k)) key = k; }
+      if (!key) return;
+      const l = map.get(key);
+      liveLineup.set(d.id, key);
+      l.count++;
+      if (d.date && (!l.first || d.date < l.first)) l.first = d.date;
+      if (d.date && (!l.last || d.date > l.last)) l.last = d.date;
+    });
+    // 名前付け
+    const byGroup = new Map();
+    map.forEach(l => { if (!byGroup.has(l.group)) byGroup.set(l.group, []); byGroup.get(l.group).push(l); });
+    byGroup.forEach(list => {
+      list.sort((a, b) => (a.start || a.first || '9999').localeCompare(b.start || b.first || '9999') || a.members.length - b.members.length);
+      const total = {}, seen = {};
+      list.forEach(l => { total[l.members.length] = (total[l.members.length] || 0) + 1; });
+      list.forEach(l => {
+        const n = l.members.length;
+        seen[n] = (seen[n] || 0) + 1;
+        l.short = `${n}人体制`;
+        l.name = `${n}人体制（${l.members.join('、')}）`;
+        const from = l.start || l.first, to = l.end || (l.defined ? '' : l.last);
+        l.period = from || to ? `${fmtDate(from)}〜${fmtDate(to)}` : '期間未設定';
+      });
+    });
+    lineupMap = map;
+    map.forEach(l => l.members.forEach(m => addTo(view, 'member', l.group, m)));
+  }
+  const lineupsOfGroup = g => [...lineupMap.values()].filter(l => l.group === g)
+    .sort((a, b) => (a.start || a.first || '9999').localeCompare(b.start || b.first || '9999') || a.members.length - b.members.length);
+  function pickLineupByDate(list, date) {
+    if (!date) return null;
+    let best = null;
+    list.forEach(l => {
+      const st = l.start || l.first;
+      if (!st || st > date) return;
+      if (l.end && l.end < date) return;
+      if (!best || st > (best.start || best.first)) best = l;
+    });
+    return best;
   }
   // グループ指定あり → そのグループの候補、なければ全グループ分
   function gItems(kind, group) {
@@ -570,7 +688,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       const v = items[i];
       if (v === undefined) return;
       hide();
-      if (opts.onPick) opts.onPick(v); else input.value = v;
+      if (opts.onPick) opts.onPick(v); else { input.value = v; input.dispatchEvent(new Event('change', { bubbles: true })); }
     }
     input.addEventListener('input', () => { active = -1; render(); });
     input.addEventListener('focus', () => { active = -1; render(); });
@@ -608,11 +726,50 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
 
   // ================= メンバー / チェキ / 曲 =================
   function renderMembers() {
-    $('memberChips').innerHTML = currentMembers.length
+    const l = currentLineup ? lineupMap.get(currentLineup) : null;
+    const absent = l ? l.members.filter(m => !currentMembers.includes(m)) : [];
+    $('memberChips').innerHTML = (currentMembers.length
       ? currentMembers.map((m, i) => `<span class="chip">${esc(m)}<button type="button" data-i="${i}" aria-label="${esc(m)}を外す">×</button></span>`).join('')
-      : '<p class="empty">まだ入っていません</p>';
+      : '<p class="empty">体制を選ぶとメンバーが入ります</p>')
+      + absent.map(m => `<span class="chip off" title="休演">${esc(m)}<button type="button" data-back="${esc(m)}" aria-label="${esc(m)}を戻す">↺</button></span>`).join('');
+    $('lineupHint').textContent = l
+      ? `${l.period}　休演したメンバーは×で外せます${absent.length ? `（休演: ${absent.join('、')}）` : ''}`
+      : (curGroup() && !lineupsOfGroup(curGroup()).length ? 'このグループの体制はまだありません。「候補の管理」で追加できます。' : '');
   }
-  $('memberChips').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { currentMembers.splice(+b.dataset.i, 1); renderMembers(); } });
+  $('memberChips').addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.back) {
+      const l = lineupMap.get(currentLineup);
+      currentMembers.push(b.dataset.back);
+      if (l) currentMembers.sort((x, y) => (l.members.indexOf(x) + 1 || 99) - (l.members.indexOf(y) + 1 || 99));
+    } else currentMembers.splice(+b.dataset.i, 1);
+    renderMembers();
+  });
+  function setLineup(key) {
+    currentLineup = key;
+    const l = lineupMap.get(key);
+    if (l) currentMembers = [...l.members];
+    renderMembers();
+  }
+  // 体制の選択肢を更新。auto=true なら日付から自動で選ぶ（手で選んだ後は変えない）
+  function refreshLineupSelect(auto) {
+    const g = curGroup(), sel = $('lineupSelect'), list = g ? lineupsOfGroup(g) : [];
+    if (currentLineup && !lineupMap.has(currentLineup)) currentLineup = '';
+    if (currentLineup && lineupMap.get(currentLineup).group !== g) { currentLineup = ''; lineupManual = false; }
+    if (auto && !lineupManual) {
+      const best = pickLineupByDate(list, F.date.value);
+      if (best && best.key !== currentLineup) setLineup(best.key);
+    }
+    sel.innerHTML = !g ? '<option value="">先にグループを入力してください</option>'
+      : '<option value="">（体制を選ばない）</option>' + list.map(l => `<option value="${esc(l.key)}">${esc(l.name)}（${esc(l.period)}）</option>`).join('');
+    sel.value = currentLineup;
+    renderMembers();
+  }
+  $('lineupSelect').addEventListener('change', e => { lineupManual = true; if (e.target.value) setLineup(e.target.value); else { currentLineup = ''; renderMembers(); } });
+  F.group.addEventListener('change', () => refreshLineupSelect(true));
+  F.group.addEventListener('blur', () => setTimeout(() => refreshLineupSelect(true), 250));
+  F.date.addEventListener('change', () => refreshLineupSelect(true));
   function addMember(name) {
     const names = String(name || '').split(/[、,，]/).map(s => s.trim()).filter(Boolean);
     if (!names.length) { toast('メンバー名を入力してください', 'error'); return; }
@@ -621,13 +778,6 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     renderMembers();
   }
   $('addMemberBtn').addEventListener('click', () => addMember($('memberInput').value));
-  $('addAllMembersBtn').addEventListener('click', () => {
-    const g = curGroup();
-    const list = g && view.member.has(g) ? [...view.member.get(g)] : [];
-    if (!list.length) { toast(g ? `「${g}」のメンバーが未登録です。「候補の管理」で登録できます` : '先にグループを入力してください', 'error'); return; }
-    list.forEach(m => { if (!currentMembers.includes(m)) currentMembers.push(m); });
-    renderMembers();
-  });
 
   function renderCheki() {
     $('chekiChips').innerHTML = currentCheki.length
@@ -664,7 +814,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     const entry = {
       id: editingId || genId(),
       date: F.date.value, liveName: F.name.value.trim(), liveType: F.type.value.trim(),
-      venue: F.venue.value.trim(), group: F.group.value.trim(), members: [...currentMembers],
+      venue: F.venue.value.trim(), group: F.group.value.trim(), members: [...currentMembers], lineup: currentLineup || '',
       costume: F.costume.value.trim(), chekiDetails: clone(currentCheki),
       setlist: splitSongs(F.setlist.value).join('\n'), memo: F.memo.value.trim(),
       createdAt: old?.createdAt || Date.now(), updatedAt: Date.now(),
@@ -680,8 +830,8 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
 
   function resetForm() {
     $('liveEntryForm').reset();
-    currentCheki = []; currentMembers = [];
-    renderCheki(); renderMembers();
+    currentCheki = []; currentMembers = []; currentLineup = ''; lineupManual = false;
+    renderCheki(); refreshLineupSelect(false);
     editingId = null;
     $('submitButton').textContent = '保存する';
     $('formTitle').textContent = 'ライブを記録';
@@ -695,7 +845,8 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     F.venue.value = d.venue || ''; F.group.value = d.group || ''; F.costume.value = d.costume || '';
     F.setlist.value = d.setlist || ''; F.memo.value = d.memo || '';
     currentCheki = clone(d.chekiDetails || []); currentMembers = [...(d.members || [])];
-    renderCheki(); renderMembers();
+    currentLineup = liveLineup.get(d.id) || ''; lineupManual = true;
+    renderCheki(); refreshLineupSelect(false);
     editingId = id;
     $('submitButton').textContent = '更新する';
     $('formTitle').textContent = `編集中: ${d.date} ${d.liveName || d.liveType}`;
@@ -706,7 +857,8 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
 
   // ================= 一覧 =================
   function filtered() {
-    return liveData.filter(d => (fYear === 'all' || (d.date || '').slice(0, 4) === fYear) && (fGroup === 'all' || (d.group || '').trim() === fGroup));
+    return liveData.filter(d => (fYear === 'all' || (d.date || '').slice(0, 4) === fYear) && (fGroup === 'all' || (d.group || '').trim() === fGroup)
+      && (fLineup === 'all' || liveLineup.get(d.id) === fLineup));
   }
   function liveCard(d, deleted) {
     const songs = splitSongs(d.setlist);
@@ -719,13 +871,22 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
         <span class="date">${esc(d.date)}</span>
         <span class="name">${esc(d.liveName || d.liveType || 'ライブ')}</span>
         <span class="sub">${d.liveType ? `<span class="tag">${esc(d.liveType)}</span>` : ''}<b>${esc(d.group || '—')}</b> ／ ${esc(d.venue || '会場未記録')} ／ 衣装: ${esc(d.costume || '未記録')}</span>
-        ${d.members && d.members.length ? `<span class="sub">メンバー: ${esc(d.members.join('、'))}</span>` : ''}
+        ${memberLine(d)}
         ${cheki ? `<span class="sub">チェキ: ${cheki}</span>` : ''}
         ${deleted ? '' : `<details><summary>セットリスト（${songs.length}曲）</summary><ol>${songs.map(s => `<li>${esc(s)}</li>`).join('')}</ol></details>`}
         ${d.memo && !deleted ? `<div class="memo">${esc(d.memo)}</div>` : ''}
       </div>
       <div class="btns">${btns}</div>
     </article>`;
+  }
+  function memberLine(d) {
+    const l = lineupMap.get(liveLineup.get(d.id));
+    const ms = d.members || [];
+    if (l) {
+      const absent = l.members.filter(m => !ms.includes(m)), extra = ms.filter(m => !l.members.includes(m));
+      return `<span class="sub">体制: <b>${esc(l.name)}</b>${absent.length ? ` ／ 休演: ${esc(absent.join('、'))}` : ''}${extra.length ? ` ／ ゲスト等: ${esc(extra.join('、'))}` : ''}</span>`;
+    }
+    return ms.length ? `<span class="sub">メンバー: ${esc(ms.join('、'))}</span>` : '';
   }
   function renderList() {
     const list = filtered().sort((a, b) => (sortOrder === 'desc' ? -1 : 1) * ((a.date || '').localeCompare(b.date || '') || (a.createdAt || 0) - (b.createdAt || 0)));
@@ -769,20 +930,28 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     const gOpts = '<option value="all">すべて</option>' + groups.map(g => `<option value="${esc(g)}">${esc(g)}</option>`).join('');
     ['yearFilter', 'yearFilter2'].forEach(id => { $(id).innerHTML = yOpts; $(id).value = fYear; });
     ['groupFilter', 'groupFilter2'].forEach(id => { $(id).innerHTML = gOpts; $(id).value = fGroup; });
+    const ls = fGroup === 'all' ? [] : lineupsOfGroup(fGroup);
+    if (fLineup !== 'all' && !ls.some(l => l.key === fLineup)) fLineup = 'all';
+    const lOpts = '<option value="all">すべて</option>' + ls.map(l => `<option value="${esc(l.key)}">${esc(l.name)}（${esc(l.period)}）</option>`).join('');
+    ['lineupFilter', 'lineupFilter2'].forEach(id => { $(id).innerHTML = lOpts; $(id).value = fLineup; });
+    document.querySelectorAll('.lineup-filter').forEach(el => { el.hidden = !ls.length; });
   }
+  ['lineupFilter', 'lineupFilter2'].forEach(id => $(id).addEventListener('change', e => { fLineup = e.target.value; renderAll(); }));
   ['yearFilter', 'yearFilter2'].forEach(id => $(id).addEventListener('change', e => { fYear = e.target.value; renderAll(); }));
-  ['groupFilter', 'groupFilter2'].forEach(id => $(id).addEventListener('change', e => { fGroup = e.target.value; renderAll(); }));
+  ['groupFilter', 'groupFilter2'].forEach(id => $(id).addEventListener('change', e => { fGroup = e.target.value; fLineup = 'all'; renderAll(); }));
   $('sortOrder').addEventListener('change', e => { sortOrder = e.target.value; renderList(); });
 
   // ================= ランキング =================
   function renderRankings() {
-    const venue = {}, costume = {}, songs = {}, cheki = {}, member = {};
+    const venue = {}, costume = {}, songs = {}, cheki = {}, member = {}, lineup = {};
     const inc = (o, k, n = 1) => { k = String(k || '').trim(); if (k) o[k] = (o[k] || 0) + n; };
     filtered().forEach(d => {
       inc(venue, d.venue); inc(costume, d.costume);
       splitSongs(d.setlist).forEach(s => inc(songs, s));
       (d.chekiDetails || []).forEach(c => inc(cheki, c.name, parseInt(c.count, 10) || 0));
       (d.members || []).forEach(m => inc(member, m));
+      const l = lineupMap.get(liveLineup.get(d.id));
+      if (l) inc(lineup, fGroup === 'all' ? `${l.group} ${l.name}` : l.name);
     });
     const zeroFill = (o, kind) => {
       const m = view[kind];
@@ -801,13 +970,14 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     draw('setlistRanking', songs, '回', '楽曲');
     draw('venueRanking', venue, '回', '会場');
     draw('costumeRanking', costume, '回', '衣装');
+    draw('lineupRanking', lineup, '回', '体制');
     draw('memberRanking', member, '回', 'メンバー');
     draw('chekiRanking', cheki, '枚', 'チェキ');
   }
 
   // ================= 候補の管理 =================
   const GLOBAL = { groups: 'グループ', venues: '会場', liveTypes: 'ライブの種類' };
-  const SCOPED = { member: 'メンバー', song: '楽曲', costume: '衣装', cheki: 'チェキ相手' };
+  const SCOPED = { song: '楽曲', costume: '衣装', cheki: 'チェキ相手' };
   $('globalManage').innerHTML = Object.entries(GLOBAL).map(([k, label]) => `
     <div class="panel"><h3>${label}</h3>
       <div class="row"><div class="grow"><input id="g-in-${k}" class="field" placeholder="新しい${label}"></div><button type="button" class="btn" data-gadd="${k}">追加</button></div>
@@ -819,7 +989,114 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       <ul id="s-list-${k}" class="cand"></ul></div>`).join('');
   const candRow = (attrs, v) => `<li><span>${esc(v)}</span><button type="button" class="btn sm danger" ${attrs} data-item="${esc(v)}">削除</button></li>`;
 
+  // ----- グループ・体制・メンバー -----
+  let lmPicked = [], lmEditKey = '';
+  const lmGroup = () => $('lmGroup').value;
+  attachAutocomplete($('lmPickIn'), () => gItems('member', lmGroup()).filter(m => !lmPicked.includes(m)), { onPick: lmPick, onEnter: lmPick });
+  function lmPick(name) {
+    String(name || '').split(/[、,，]/).map(s => s.trim()).filter(Boolean).forEach(n => { if (!lmPicked.includes(n)) lmPicked.push(n); });
+    $('lmPickIn').value = '';
+    renderLmForm();
+  }
+  function renderLmForm() {
+    $('lmPicked').innerHTML = lmPicked.length
+      ? lmPicked.map((m, i) => `<span class="chip">${esc(m)}<button type="button" data-lmpick="${i}" aria-label="${esc(m)}を外す">×</button></span>`).join('')
+      : '<p class="empty">メンバーを選んでください</p>';
+    const g = lmGroup();
+    if (!lmPicked.length || !g) { $('lmPreview').textContent = ''; return; }
+    const key = lineupKey(g, lmPicked);
+    const dup = lineupMap.get(key);
+    if (dup && key !== lmEditKey) { $('lmPreview').textContent = `同じメンバー構成の体制（${dup.name}）がすでにあります。`; return; }
+    const uniq = [...new Set(lmPicked)];
+    $('lmPreview').textContent = `保存すると「${uniq.length}人体制（${uniq.join('、')}）」になります。`;
+  }
+  function resetLmForm() {
+    lmPicked = []; lmEditKey = '';
+    $('lmStart').value = ''; $('lmEnd').value = '';
+    $('lmFormTitle').textContent = '体制を追加'; $('lmSave').textContent = '体制を保存'; $('lmCancel').hidden = true;
+    renderLmForm();
+  }
+  function renderLineupManage() {
+    const sel = $('lmGroup'), keep = sel.value;
+    sel.innerHTML = '<option value="">グループを選択…</option>' + sortJa(view.groups).map(g => `<option value="${esc(g)}">${esc(g)}</option>`).join('');
+    sel.value = view.groups.has(keep) ? keep : '';
+    const g = sel.value;
+    $('lmBody').hidden = !g;
+    if (!g) return;
+    const members = view.member.get(g) || new Set();
+    $('lmMembers').innerHTML = members.size
+      ? [...members].map(m => `<span class="chip">${esc(m)}<button type="button" data-lmdelmember="${esc(m)}" aria-label="${esc(m)}を候補から削除">×</button></span>`).join('')
+      : '<p class="empty">まだ登録されていません</p>';
+    const list = lineupsOfGroup(g);
+    $('lmLineups').innerHTML = list.length ? list.map(l => `
+      <div class="lineup-card">
+        <div class="head"><span class="lname">${esc(l.name)}</span><span class="period">${esc(l.period)}${l.count ? `・${l.count}ライブ` : ''}</span></div>
+        <div class="row"><button type="button" class="btn sm" data-lmedit="${esc(l.key)}">編集</button><button type="button" class="btn sm danger" data-lmdel="${esc(l.key)}">削除</button></div>
+      </div>`).join('') : '<p class="empty">まだ体制がありません。下のフォームから追加してください。</p>';
+    renderLmForm();
+  }
+  $('lmGroup').addEventListener('change', () => { resetLmForm(); renderLineupManage(); });
+  $('lmMemberIn').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) $('lmMemberAdd').click(); });
+  $('lmPickAdd').addEventListener('click', () => lmPick($('lmPickIn').value));
+  $('lmPickAll').addEventListener('click', () => { lmPick([...(view.member.get(lmGroup()) || [])].join('、')); });
+  $('lmCancel').addEventListener('click', resetLmForm);
+  $('lineupManage').addEventListener('click', async e => {
+    const t = e.target.closest('button');
+    if (!t) return;
+    const g = lmGroup();
+    if (t.id === 'lmMemberAdd') {
+      const names = $('lmMemberIn').value.split(/[、,，]/).map(s => s.trim()).filter(Boolean);
+      const added = names.filter(n => !(view.member.get(g)?.has(n)) && addTo(cand, 'member', g, n));
+      if (!added.length) return toast(names.length ? 'すでに登録されています' : '名前を入力してください', names.length ? undefined : 'error');
+      $('lmMemberIn').value = ''; Store.saveCandidates(); toast(`「${added.join('、')}」を追加しました`);
+    } else if (t.dataset.lmdelmember) {
+      const m = t.dataset.lmdelmember;
+      if (lineupsOfGroup(g).some(l => l.members.includes(m))) return toast(`「${m}」は体制に入っているので削除できません。先に体制を編集してください`, 'error');
+      if (!await confirmBox(`「${m}」をメンバー候補から削除しますか？`)) return;
+      cand.member.get(g)?.delete(m); await Store.saveCandidates();
+      toast(view.member.get(g)?.has(m) ? `「${m}」は登録済みのライブで使われているため、候補に残ります` : `「${m}」を削除しました`);
+    } else if (t.dataset.lmpick) {
+      lmPicked.splice(+t.dataset.lmpick, 1); renderLmForm();
+    } else if (t.dataset.lmedit) {
+      const l = lineupMap.get(t.dataset.lmedit);
+      if (!l) return;
+      lmEditKey = l.key; lmPicked = [...l.members];
+      $('lmStart').value = l.start || ''; $('lmEnd').value = l.end || '';
+      $('lmFormTitle').textContent = `${l.name}を編集`; $('lmSave').textContent = '変更を保存'; $('lmCancel').hidden = false;
+      renderLmForm();
+      $('lmForm').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    } else if (t.dataset.lmdel) {
+      const l = lineupMap.get(t.dataset.lmdel);
+      if (!l) return;
+      if (l.count) return toast(`${l.name}は${l.count}件のライブで使われているため削除できません`, 'error');
+      if (!await confirmBox(`${l.name}（${l.members.join('、')}）を削除しますか？`)) return;
+      cand.lineups = cand.lineups.filter(x => lineupKey(x.group, x.members) !== l.key);
+      if (lmEditKey === l.key) resetLmForm();
+      await Store.saveCandidates(); toast(`${l.name}を削除しました`);
+    } else if (t.id === 'lmSave') {
+      if (!g) return toast('グループを選んでください', 'error');
+      if (!lmPicked.length) return toast('メンバーを選んでください', 'error');
+      const start = $('lmStart').value, end = $('lmEnd').value;
+      if (start && end && end < start) return toast('終了日が開始日より前になっています', 'error');
+      const key = lineupKey(g, lmPicked);
+      if (key !== lmEditKey && lineupMap.has(key)) return toast('同じメンバー構成の体制がすでにあります', 'error');
+      lmPicked.forEach(m => addTo(cand, 'member', g, m));
+      const data = { group: g, members: [...new Set(lmPicked)], start, end };
+      const old = lmEditKey;
+      cand.lineups = cand.lineups.filter(x => lineupKey(x.group, x.members) !== old && lineupKey(x.group, x.members) !== key);
+      cand.lineups.push(data);
+      // メンバー構成を変えた場合、その体制で記録したライブの紐づけも新しい体制へ
+      if (old && old !== key) {
+        liveData.filter(d => liveLineup.get(d.id) === old).forEach(d => Store.putLive({ ...d, lineup: key }));
+      }
+      resetLmForm();
+      await Store.saveCandidates();
+      toast(old ? '体制を更新しました' : '体制を追加しました');
+    }
+  });
+
   function renderManage() {
+    renderLineupManage();
     Object.keys(GLOBAL).forEach(k => {
       const set = view[k];
       $('g-list-' + k).innerHTML = set.size ? sortJa(set).map(v => candRow(`data-gdel="${k}"`, v)).join('') : '<p class="empty">まだありません</p>';
@@ -861,8 +1138,8 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     } else if (t.dataset.gdel || t.dataset.sdel) {
       const item = t.dataset.item;
       const isGroup = t.dataset.gdel === 'groups';
-      if (!await confirmBox(`「${item}」を候補から削除しますか？${isGroup ? '（このグループのメンバー・楽曲・衣装・チェキ相手の候補も消えます）' : ''}`)) return;
-      if (t.dataset.gdel) { cand[t.dataset.gdel].delete(item); if (isGroup) KINDS.forEach(k => cand[k].delete(item)); }
+      if (!await confirmBox(`「${item}」を候補から削除しますか？${isGroup ? '（このグループの体制・メンバー・楽曲・衣装・チェキ相手の候補も消えます）' : ''}`)) return;
+      if (t.dataset.gdel) { cand[t.dataset.gdel].delete(item); if (isGroup) { KINDS.forEach(k => cand[k].delete(item)); cand.lineups = cand.lineups.filter(l => l.group !== item); } }
       else cand[t.dataset.sdel].get(t.dataset.group)?.delete(item);
       await Store.saveCandidates();
       const still = t.dataset.gdel ? view[t.dataset.gdel].has(item) : view[t.dataset.sdel].get(t.dataset.group)?.has(item);
@@ -884,21 +1161,38 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   $('importDataButton').addEventListener('click', async () => {
     const msg = $('pasteModalMessage');
     const say = t => { msg.hidden = false; msg.textContent = t; };
-    let arr;
-    try { const p = JSON.parse($('pasteDataTextarea').value.trim()); arr = Array.isArray(p) ? p : [p]; }
+    let arr, lineupsIn = [];
+    try {
+      const p = JSON.parse($('pasteDataTextarea').value.trim());
+      if (p && !Array.isArray(p) && Array.isArray(p.lives)) { arr = p.lives; lineupsIn = Array.isArray(p.lineups) ? p.lineups : []; }
+      else arr = Array.isArray(p) ? p : [p];
+    }
     catch (e) { return say('JSONとして読み取れませんでした。コピーした内容をそのまま貼り付けてください。'); }
     const valid = arr.filter(d => d && d.date && typeof d.group === 'string' && d.group && d.setlist);
     if (!valid.length) return say('取り込めるライブデータが見つかりませんでした。');
+    let addedLineups = 0;
+    lineupsIn.forEach(l => {
+      if (!l || !l.group || !Array.isArray(l.members) || !l.members.length) return;
+      const key = lineupKey(l.group, l.members);
+      if (cand.lineups.some(x => lineupKey(x.group, x.members) === key)) return;
+      cand.lineups.push({ group: l.group, members: [...l.members], start: l.start || '', end: l.end || '' });
+      l.members.forEach(m => addTo(cand, 'member', l.group, m));
+      addedLineups++;
+    });
+    if (addedLineups) Store.saveCandidates();
+    const definedKeys = new Set(cand.lineups.map(x => lineupKey(x.group, x.members)));
     const btn = $('importDataButton'); btn.disabled = true;
     let n = 0;
     try {
       for (const d of valid) {
-        const entry = { liveType: '', venue: '', costume: '', liveName: '', memo: '', ...stripMeta(d), members: Array.isArray(d.members) ? d.members : [], chekiDetails: d.chekiDetails || [], id: genId(), createdAt: Date.now() + n, updatedAt: Date.now() };
+        const members = Array.isArray(d.members) ? d.members : [];
+        const mk = members.length ? lineupKey(d.group, members) : '';
+        const entry = { liveType: '', venue: '', costume: '', liveName: '', memo: '', ...stripMeta(d), members, lineup: d.lineup || (definedKeys.has(mk) ? mk : ''), chekiDetails: d.chekiDetails || [], id: genId(), createdAt: Date.now() + n, updatedAt: Date.now() };
         Store.putLive(entry); n++;
         
       }
       $('pasteModal').hidden = true;
-      toast(`${n}件のライブを取り込みました`);
+      toast(`${n}件のライブ${addedLineups ? `と${addedLineups}件の体制` : ''}を取り込みました`);
     } catch (err) { writeError(err); }
     finally { btn.disabled = false; }
   });
@@ -1115,7 +1409,16 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     const set = (el, v) => { if (v) el.value = v; };
     set(F.date, r.date); set(F.venue, r.venue); set(F.group, r.group); set(F.name, r.liveName);
     set(F.type, r.liveType); set(F.costume, r.costume);
-    if (r.members.length) { currentMembers = [...new Set(r.members)]; renderMembers(); }
+    lineupManual = false;
+    const ls = lineupsOfGroup(curGroup());
+    if (r.members.length) {
+      const set = new Set(r.members.map(norm));
+      const exact = ls.find(l => l.members.length === set.size && l.members.every(m => set.has(norm(m))));
+      const cover = exact || ls.find(l => [...set].every(m => l.members.some(x => norm(x) === m)) && pickLineupByDate([l], F.date.value));
+      if (cover) { setLineup(cover.key); lineupManual = true; }
+      refreshLineupSelect(!cover);
+      currentMembers = [...new Set(r.members)]; renderMembers();
+    } else refreshLineupSelect(true);
     if (r.songs.length) F.setlist.value = r.songs.join('\n');
     const url = $('tweetUrl').value.trim();
     if (url && !F.memo.value.includes(url)) F.memo.value = (F.memo.value ? F.memo.value + '\n' : '') + '元ツイート: ' + url;
@@ -1130,7 +1433,8 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
         ${row('種類', r.liveType)}
         ${row('会場', r.venue, r.venue && !view.venues.has(r.venue) ? '新しい会場' : '')}
         ${row('グループ', r.group, r.group && !view.groups.has(r.group) ? '新しいグループ' : '')}
-        ${row('メンバー', r.members.join('、'), r.absent ? '休演: ' + r.absent : '')}
+        ${row('体制', currentLineup ? lineupMap.get(currentLineup)?.name : '', currentLineup ? '日付から自動で選びました' : '')}
+        ${row('メンバー', currentMembers.join('、'), r.absent ? '休演: ' + r.absent : '')}
         ${row('衣装', r.costume)}
         ${row('セトリ', r.songs.length ? r.songs.length + '曲' : '', r.newSongs.length ? '未登録の曲: ' + r.newSongs.join(' / ') : '')}
       </dl>
@@ -1154,6 +1458,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     renderList();
     renderRankings();
     renderManage();
+    refreshLineupSelect(false);
   }
 
   // 初期表示
