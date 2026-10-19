@@ -285,13 +285,36 @@ h4 { margin: 0; font-size: 0.88rem; color: var(--muted); letter-spacing: 0.03em;
     </form>
   </section>
 
+  <!-- ========== 絞り込み（一覧・ランキング共通） ========== -->
+  <section id="filterPanel" class="panel" hidden>
+    <div class="row" style="justify-content:space-between;align-items:center">
+      <h2>絞り込み</h2>
+      <button type="button" id="clearFilters" class="btn sm">条件をクリア</button>
+    </div>
+    <div class="grid2">
+      <div><label class="lbl" for="yearFilter">年</label><select id="yearFilter" class="field"><option value="all">すべて</option></select></div>
+      <div><label class="lbl" for="groupFilter">グループ</label><select id="groupFilter" class="field"><option value="all">すべて</option></select></div>
+      <div class="lineup-filter" hidden><label class="lbl" for="lineupFilter">体制</label><select id="lineupFilter" class="field"><option value="all">すべて</option></select></div>
+      <div><label class="lbl" for="typeFilter">ライブの種類</label><select id="typeFilter" class="field"><option value="all">すべて</option></select></div>
+    </div>
+    <details id="moreFilters">
+      <summary class="hint" style="cursor:pointer">日付・曲・会場・衣装・メンバーで絞り込む</summary>
+      <div class="grid2" style="margin-top:10px">
+        <div><label class="lbl" for="fromFilter">日付（から）</label><input type="date" id="fromFilter" class="field"></div>
+        <div><label class="lbl" for="toFilter">日付（まで）</label><input type="date" id="toFilter" class="field"></div>
+        <div><label class="lbl" for="songFilter">曲</label><input id="songFilter" class="field" placeholder="曲名の一部"></div>
+        <div><label class="lbl" for="venueFilter">会場</label><input id="venueFilter" class="field" placeholder="会場名の一部"></div>
+        <div><label class="lbl" for="costumeFilter">衣装</label><input id="costumeFilter" class="field" placeholder="衣装名の一部"></div>
+        <div><label class="lbl" for="memberFilter">メンバー</label><input id="memberFilter" class="field" placeholder="出演したメンバー"></div>
+      </div>
+    </details>
+    <p id="filterSummary" class="hint"></p>
+  </section>
+
   <!-- ========== 一覧 ========== -->
   <section class="tab" id="tab-list" hidden>
     <div class="panel">
       <div class="grid2">
-        <div><label class="lbl" for="yearFilter">年</label><select id="yearFilter" class="field"><option value="all">すべて</option></select></div>
-        <div><label class="lbl" for="groupFilter">グループ</label><select id="groupFilter" class="field"><option value="all">すべて</option></select></div>
-        <div class="lineup-filter" hidden><label class="lbl" for="lineupFilter">体制</label><select id="lineupFilter" class="field"><option value="all">すべて</option></select></div>
         <div><label class="lbl" for="sortOrder">並び順</label><select id="sortOrder" class="field"><option value="desc">新しい順</option><option value="asc">古い順</option></select></div>
       </div>
       <div class="stats">
@@ -318,14 +341,6 @@ h4 { margin: 0; font-size: 0.88rem; color: var(--muted); letter-spacing: 0.03em;
 
   <!-- ========== ランキング ========== -->
   <section class="tab" id="tab-ranking" hidden>
-    <div class="panel">
-      <p class="hint">年・グループ・体制で絞り込んで集計します（「ライブ一覧」の絞り込みと連動）。</p>
-      <div class="grid2">
-        <div><label class="lbl" for="yearFilter2">年</label><select id="yearFilter2" class="field"></select></div>
-        <div><label class="lbl" for="groupFilter2">グループ</label><select id="groupFilter2" class="field"></select></div>
-        <div class="lineup-filter" hidden><label class="lbl" for="lineupFilter2">体制</label><select id="lineupFilter2" class="field"></select></div>
-      </div>
-    </div>
     <div class="cards">
       <div class="panel"><h3>セットリスト</h3><ol id="setlistRanking" class="rank"></ol></div>
       <div class="panel"><h3>会場</h3><ol id="venueRanking" class="rank"></ol></div>
@@ -448,6 +463,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   let currentCheki = [], currentMembers = [], currentChekiTweets = [];
   let currentLineup = '', lineupManual = false;
   let editingId = null, fYear = 'all', fGroup = 'all', fLineup = 'all', sortOrder = 'desc';
+  let fType = 'all', fFrom = '', fTo = '', fSong = '', fVenue = '', fCostume = '', fMember = '';
   let lineupMap = new Map();        // key → 体制（名前・期間付き）
   let liveLineup = new Map();       // ライブID → 体制key
 
@@ -665,6 +681,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   function showTab(name) {
     document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === name)));
     document.querySelectorAll('section.tab').forEach(s => { s.hidden = s.id !== 'tab-' + name; });
+    $('filterPanel').hidden = !(name === 'list' || name === 'ranking');
     try { localStorage.setItem('setori-tab', name); } catch (e) { }
     window.scrollTo({ top: 0 });
   }
@@ -970,8 +987,14 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
 
   // ================= 一覧 =================
   function filtered() {
+    const has = (v, q) => !q || norm(v).includes(norm(q));
     return liveData.filter(d => (fYear === 'all' || (d.date || '').slice(0, 4) === fYear) && (fGroup === 'all' || (d.group || '').trim() === fGroup)
-      && (fLineup === 'all' || liveLineup.get(d.id) === fLineup));
+      && (fLineup === 'all' || liveLineup.get(d.id) === fLineup)
+      && (fType === 'all' || (fType === '__none' ? !d.liveType : d.liveType === fType))
+      && (!fFrom || (d.date || '') >= fFrom) && (!fTo || (d.date || '') <= fTo)
+      && has(d.venue, fVenue) && has(d.costume, fCostume)
+      && (!fSong || splitSongs(d.setlist).some(x => has(x, fSong)))
+      && (!fMember || (d.members || []).some(x => has(x, fMember))));
   }
   function liveCard(d, deleted) {
     const songs = splitSongs(d.setlist);
@@ -1042,17 +1065,50 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     if (fGroup !== 'all' && !view.groups.has(fGroup)) fGroup = 'all';
     const yOpts = '<option value="all">すべて</option>' + years.map(y => `<option value="${esc(y)}">${esc(y)}年</option>`).join('');
     const gOpts = '<option value="all">すべて</option>' + groups.map(g => `<option value="${esc(g)}">${esc(g)}</option>`).join('');
-    ['yearFilter', 'yearFilter2'].forEach(id => { $(id).innerHTML = yOpts; $(id).value = fYear; });
-    ['groupFilter', 'groupFilter2'].forEach(id => { $(id).innerHTML = gOpts; $(id).value = fGroup; });
+    $('yearFilter').innerHTML = yOpts; $('yearFilter').value = fYear;
+    $('groupFilter').innerHTML = gOpts; $('groupFilter').value = fGroup;
+    const types = sortJa(new Set(liveData.map(d => d.liveType).filter(Boolean)));
+    if (fType !== 'all' && fType !== '__none' && !types.includes(fType)) fType = 'all';
+    $('typeFilter').innerHTML = '<option value="all">すべて</option>' + types.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('')
+      + (liveData.some(d => !d.liveType) ? '<option value="__none">（未設定）</option>' : '');
+    $('typeFilter').value = fType;
+    const conds = [fYear !== 'all' && `${fYear}年`, fGroup !== 'all' && fGroup, fLineup !== 'all' && lineupMap.get(fLineup)?.short,
+      fType !== 'all' && (fType === '__none' ? '種類未設定' : fType), (fFrom || fTo) && `${fmtDate(fFrom)}〜${fmtDate(fTo)}`,
+      fSong && `曲「${fSong}」`, fVenue && `会場「${fVenue}」`, fCostume && `衣装「${fCostume}」`, fMember && `メンバー「${fMember}」`].filter(Boolean);
+    $('filterSummary').textContent = conds.length ? `条件: ${conds.join(' ／ ')}（${filtered().length}ライブ）` : `すべてのライブ（${liveData.length}件）`;
+    $('clearFilters').hidden = !conds.length;
     const ls = fGroup === 'all' ? [] : lineupsOfGroup(fGroup);
     if (fLineup !== 'all' && !ls.some(l => l.key === fLineup)) fLineup = 'all';
     const lOpts = '<option value="all">すべて</option>' + ls.map(l => `<option value="${esc(l.key)}">${esc(l.name)}（${esc(l.period)}）</option>`).join('');
-    ['lineupFilter', 'lineupFilter2'].forEach(id => { $(id).innerHTML = lOpts; $(id).value = fLineup; });
+    $('lineupFilter').innerHTML = lOpts; $('lineupFilter').value = fLineup;
     document.querySelectorAll('.lineup-filter').forEach(el => { el.hidden = !ls.length; });
   }
-  ['lineupFilter', 'lineupFilter2'].forEach(id => $(id).addEventListener('change', e => { fLineup = e.target.value; renderAll(); }));
-  ['yearFilter', 'yearFilter2'].forEach(id => $(id).addEventListener('change', e => { fYear = e.target.value; renderAll(); }));
-  ['groupFilter', 'groupFilter2'].forEach(id => $(id).addEventListener('change', e => { fGroup = e.target.value; fLineup = 'all'; renderAll(); }));
+  $('lineupFilter').addEventListener('change', e => { fLineup = e.target.value; renderAll(); });
+  $('yearFilter').addEventListener('change', e => { fYear = e.target.value; renderAll(); });
+  $('groupFilter').addEventListener('change', e => { fGroup = e.target.value; fLineup = 'all'; renderAll(); });
+  $('typeFilter').addEventListener('change', e => { fType = e.target.value; renderAll(); });
+  $('fromFilter').addEventListener('change', e => { fFrom = e.target.value; renderAll(); });
+  $('toFilter').addEventListener('change', e => { fTo = e.target.value; renderAll(); });
+  // 文字の絞り込み（部分一致・候補つき）。打ち終わってから反映
+  const fGroupOrAll = () => fGroup === 'all' ? '' : fGroup;
+  const textFilters = {
+    songFilter: [v => { fSong = v; }, () => gItems('song', fGroupOrAll())],
+    venueFilter: [v => { fVenue = v; }, () => [...view.venues]],
+    costumeFilter: [v => { fCostume = v; }, () => gItems('costume', fGroupOrAll())],
+    memberFilter: [v => { fMember = v; }, () => gItems('member', fGroupOrAll())],
+  };
+  let filterTimer;
+  Object.entries(textFilters).forEach(([id, [set, items]]) => {
+    attachAutocomplete($(id), items);
+    const apply = () => { clearTimeout(filterTimer); filterTimer = setTimeout(() => { set($(id).value.trim()); renderAll(); }, 300); };
+    $(id).addEventListener('input', apply);
+    $(id).addEventListener('change', apply);
+  });
+  $('clearFilters').addEventListener('click', () => {
+    fYear = fGroup = fLineup = fType = 'all'; fFrom = fTo = fSong = fVenue = fCostume = fMember = '';
+    ['fromFilter', 'toFilter', ...Object.keys(textFilters)].forEach(id => { $(id).value = ''; });
+    renderAll();
+  });
   $('sortOrder').addEventListener('change', e => { sortOrder = e.target.value; renderList(); });
 
   // ================= ランキング =================
@@ -1071,7 +1127,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       const m = view[kind];
       (fGroup === 'all' ? [...m.values()] : (m.has(fGroup) ? [m.get(fGroup)] : [])).forEach(set => set.forEach(v => { if (!(v in o)) o[v] = 0; }));
     };
-    zeroFill(songs, 'song'); zeroFill(cheki, 'cheki'); zeroFill(member, 'member');
+    if (fType === 'all' && !fFrom && !fTo && !fSong && !fVenue && !fCostume && !fMember) { zeroFill(songs, 'song'); zeroFill(cheki, 'cheki'); zeroFill(member, 'member'); }
     const draw = (id, o, unit, what) => {
       const data = Object.entries(o).sort(([a, x], [b, y]) => y - x || a.localeCompare(b, 'ja'));
       if (!data.length) { $(id).innerHTML = `<p class="empty">${what}のデータがまだありません。</p>`; return; }
