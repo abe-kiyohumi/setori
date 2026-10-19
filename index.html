@@ -157,6 +157,13 @@ h4 { margin: 0; font-size: 0.88rem; color: var(--muted); letter-spacing: 0.03em;
 .tweet-row .txt { font-size: 0.85rem; color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; }
 .tweet-embeds { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; max-width: 550px; }
 .tweet-embeds a { color: var(--accent); overflow-wrap: anywhere; }
+/* 候補の整理 */
+.dupbox { border: 1px dashed var(--warn); background: var(--warn-soft); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 8px; font-size: 0.88rem; }
+.dupbox .dup { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding-top: 6px; border-top: 1px solid var(--line); }
+.dupbox .dup:first-of-type { border-top: 0; padding-top: 0; }
+.cand .uses { color: var(--muted); font-size: 0.78rem; margin-left: 6px; white-space: nowrap; }
+.cand .ops { display: flex; gap: 4px; flex-shrink: 0; }
+.cand li.editing { flex-wrap: wrap; }
 /* 候補 */
 .cand { list-style: none; margin: 0; padding: 0; max-height: 220px; overflow-y: auto; }
 .cand li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--line); font-size: 0.92rem; }
@@ -169,6 +176,7 @@ h4 { margin: 0; font-size: 0.88rem; color: var(--muted); letter-spacing: 0.03em;
 .modal { position: fixed; inset: 0; z-index: 60; background: rgba(15, 8, 20, 0.55); display: flex; align-items: center; justify-content: center; padding: 16px; }
 .modal .box { background: var(--surface); border-radius: 12px; padding: 20px; width: 100%; max-width: 520px; display: flex; flex-direction: column; gap: 14px; box-shadow: var(--shadow); }
 .modal .box p { margin: 0; }
+#confirmMessage { white-space: pre-line; }
 @media (prefers-reduced-motion: no-preference) { .toast { transition: opacity .2s; } }
 @media (max-width: 520px) {
   .live { grid-template-columns: 1fr; }
@@ -1148,17 +1156,16 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   // ================= 候補の管理 =================
   const GLOBAL = { groups: 'グループ', venues: '会場', liveTypes: 'ライブの種類' };
   const SCOPED = { song: '楽曲', costume: '衣装', cheki: 'チェキ相手' };
-  $('globalManage').innerHTML = Object.entries(GLOBAL).map(([k, label]) => `
-    <div class="panel"><h3>${label}</h3>
-      <div class="row"><div class="grow"><input id="g-in-${k}" class="field" placeholder="新しい${label}"></div><button type="button" class="btn" data-gadd="${k}">追加</button></div>
-      <ul id="g-list-${k}" class="cand"></ul></div>`).join('');
-  $('scopedManage').innerHTML = Object.entries(SCOPED).map(([k, label]) => `
-    <div class="panel"><h3>${label}（グループごと）</h3>
-      <select id="s-sel-${k}" class="field" aria-label="グループ"><option value="">グループを選択…</option></select>
-      <div class="row"><div class="grow"><input id="s-in-${k}" class="field" placeholder="${k === 'member' ? '名前（「、」区切りで複数可）' : '新しい' + label}" disabled></div><button type="button" class="btn" data-sadd="${k}" disabled>追加</button></div>
-      <ul id="s-list-${k}" class="cand"></ul></div>`).join('');
-  const candRow = (attrs, v) => `<li><span>${esc(v)}</span><button type="button" class="btn sm danger" ${attrs} data-item="${esc(v)}">削除</button></li>`;
-
+  const LABEL = { ...GLOBAL, ...SCOPED };
+  const panelHTML = (k, label, scoped) => `
+    <div class="panel" id="panel-${k}"><h3>${label}${scoped ? '（グループごと）' : ''}</h3>
+      ${scoped ? `<select id="s-sel-${k}" class="field" aria-label="グループ"><option value="">グループを選択…</option></select>` : ''}
+      <div class="row"><div class="grow"><input id="in-${k}" class="field" placeholder="新しい${label}"${scoped ? ' disabled' : ''}></div><button type="button" class="btn" data-add="${k}"${scoped ? ' disabled' : ''}>追加</button></div>
+      <input id="q-${k}" class="field" placeholder="🔍 一覧を絞り込む（文字の一部）"${scoped ? ' disabled' : ''}>
+      <div id="dup-${k}"></div>
+      <ul id="list-${k}" class="cand"></ul></div>`;
+  $('globalManage').innerHTML = Object.entries(GLOBAL).map(([k, l]) => panelHTML(k, l, false)).join('');
+  $('scopedManage').innerHTML = Object.entries(SCOPED).map(([k, l]) => panelHTML(k, l, true)).join('');
   // ----- グループ・体制・メンバー -----
   let lmPicked = [], lmEditKey = '';
   const lmGroup = () => $('lmGroup').value;
@@ -1265,56 +1272,173 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     }
   });
 
+  // ----- 候補の整理（絞り込み・表記ゆれ・名前の一括変更） -----
+  // 表記ゆれの判定: 全角半角・大文字小文字・カタカナ/ひらがな・空白・記号の違いを無視
+  const loose = s => norm(s).replace(/[^\p{L}\p{N}]/gu, '');
+  const isScoped = k => k in SCOPED;
+  const scopeGroup = k => isScoped(k) ? $('s-sel-' + k).value : '';
+  let editing = null; // { k, value }
+
+  function candItems(k, g) {
+    if (!isScoped(k)) return [...view[k]];
+    return g ? [...(view[k].get(g) || [])] : [];
+  }
+  // その候補を使っているライブの件数
+  function usageCounts(k, g) {
+    const m = new Map(), inc = v => { v = String(v || '').trim(); if (v) m.set(v, (m.get(v) || 0) + 1); };
+    liveData.forEach(d => {
+      if (k === 'groups') inc(d.group);
+      else if (k === 'venues') inc(d.venue);
+      else if (k === 'liveTypes') inc(d.liveType);
+      else if (d.group === g) {
+        if (k === 'song') new Set(splitSongs(d.setlist)).forEach(inc);
+        else if (k === 'costume') inc(d.costume);
+        else if (k === 'cheki') new Set((d.chekiDetails || []).map(c => c.name)).forEach(inc);
+      }
+    });
+    return m;
+  }
+  function renderCandPanel(k) {
+    const g = scopeGroup(k), scoped = isScoped(k);
+    if (scoped) {
+      $('in-' + k).disabled = !g; $('q-' + k).disabled = !g;
+      document.querySelector(`[data-add="${k}"]`).disabled = !g;
+      if (!g) { $('dup-' + k).innerHTML = ''; $('list-' + k).innerHTML = '<p class="empty">グループを選ぶと一覧が出ます</p>'; return; }
+    }
+    const items = candItems(k, g), uses = usageCounts(k, g);
+    // 表記ゆれ
+    const groupsByKey = new Map();
+    items.forEach(v => { const key = loose(v); if (!key) return; if (!groupsByKey.has(key)) groupsByKey.set(key, []); groupsByKey.get(key).push(v); });
+    const dups = [...groupsByKey.values()].filter(a => a.length > 1);
+    $('dup-' + k).innerHTML = dups.length ? `<div class="dupbox"><b>表記ゆれかもしれない${LABEL[k]}が${dups.length}組あります。残す方の「これに統一」を押すと、ライブの記録もまとめて書き換えます。</b>
+      ${dups.map(a => `<div class="dup">${a.map(v => `<button type="button" class="btn sm" data-merge="${esc(k)}" data-to="${esc(v)}" data-from="${esc(JSON.stringify(a.filter(x => x !== v)))}">「${esc(v)}」${uses.get(v) || 0}件 → これに統一</button>`).join('')}</div>`).join('')}</div>` : '';
+    // 一覧（絞り込み）
+    const q = $('q-' + k).value.trim();
+    let list = items.filter(v => !q || norm(v).includes(norm(q)) || loose(v).includes(loose(q)));
+    if (k !== 'song') list = sortJa(list);
+    $('list-' + k).innerHTML = !items.length ? '<p class="empty">まだありません</p>'
+      : !list.length ? '<p class="empty">条件に合う候補はありません</p>'
+      : list.map(v => editing && editing.k === k && editing.value === v
+        ? `<li class="editing"><div class="grow" style="flex:1 1 180px"><input class="field" id="rename-${k}" value="${esc(v)}"></div><span class="ops"><button type="button" class="btn sm primary" data-rename-save="${esc(k)}" data-item="${esc(v)}">変更</button><button type="button" class="btn sm" data-rename-cancel="1">やめる</button></span></li>`
+        : `<li><span>${q ? highlight(v, q) : esc(v)}<span class="uses">${uses.get(v) || 0}件</span></span><span class="ops"><button type="button" class="btn sm" data-rename="${esc(k)}" data-item="${esc(v)}">名前を変更</button><button type="button" class="btn sm danger" data-del="${esc(k)}" data-item="${esc(v)}">削除</button></span></li>`).join('');
+    if (q && list.length < items.length) $('list-' + k).insertAdjacentHTML('afterbegin', `<p class="hint">${items.length}件中 ${list.length}件を表示</p>`);
+  }
   function renderManage() {
     renderLineupManage();
-    Object.keys(GLOBAL).forEach(k => {
-      const set = view[k];
-      $('g-list-' + k).innerHTML = set.size ? sortJa(set).map(v => candRow(`data-gdel="${k}"`, v)).join('') : '<p class="empty">まだありません</p>';
-    });
     const groups = sortJa(view.groups);
     Object.keys(SCOPED).forEach(k => {
       const sel = $('s-sel-' + k), keep = sel.value;
       sel.innerHTML = '<option value="">グループを選択…</option>' + groups.map(g => `<option value="${esc(g)}">${esc(g)}</option>`).join('');
       sel.value = view.groups.has(keep) ? keep : '';
-      const g = sel.value;
-      $('s-in-' + k).disabled = !g;
-      document.querySelector(`[data-sadd="${k}"]`).disabled = !g;
-      const set = g ? (view[k].get(g) || new Set()) : null;
-      $('s-list-' + k).innerHTML = !g ? '<p class="empty">グループを選ぶと一覧が出ます</p>'
-        : set.size ? (k === 'song' ? [...set] : sortJa(set)).map(v => candRow(`data-sdel="${k}" data-group="${esc(g)}"`, v)).join('')
-          : '<p class="empty">まだありません</p>';
     });
+    Object.keys(LABEL).forEach(renderCandPanel);
   }
-  Object.keys(SCOPED).forEach(k => {
-    $('s-sel-' + k).addEventListener('change', renderManage);
-    $('s-in-' + k).addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) document.querySelector(`[data-sadd="${k}"]`).click(); });
+  Object.keys(LABEL).forEach(k => {
+    if (isScoped(k)) $('s-sel-' + k).addEventListener('change', () => { $('q-' + k).value = ''; editing = null; renderCandPanel(k); });
+    $('q-' + k).addEventListener('input', () => renderCandPanel(k));
+    $('in-' + k).addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) document.querySelector(`[data-add="${k}"]`).click(); });
   });
-  Object.keys(GLOBAL).forEach(k => $('g-in-' + k).addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) document.querySelector(`[data-gadd="${k}"]`).click(); }));
+
+  // 名前の一括変更（同じ名前にすれば統合）。ライブの記録と候補の両方を書き換える
+  function renameEverywhere(k, g, froms, to) {
+    const F = new Set(froms);
+    let changed = 0;
+    [...liveData, ...deletedLiveData].forEach(d => {
+      let n = null;
+      if (k === 'groups' && F.has(d.group)) {
+        n = { ...d, group: to };
+        if (d.lineup) { const [lg, ms] = d.lineup.split('::'); if (F.has(lg)) n.lineup = to + '::' + (ms || ''); }
+      } else if (k === 'venues' && F.has(d.venue)) n = { ...d, venue: to };
+      else if (k === 'liveTypes' && F.has(d.liveType)) n = { ...d, liveType: to };
+      else if (d.group === g) {
+        if (k === 'song') {
+          const songs = splitSongs(d.setlist);
+          if (songs.some(x => F.has(x))) n = { ...d, setlist: songs.map(x => F.has(x) ? to : x).join('\n') };
+        } else if (k === 'costume' && F.has(d.costume)) n = { ...d, costume: to };
+        else if (k === 'cheki' && (d.chekiDetails || []).some(c => F.has(c.name))) {
+          const merged = [];
+          (d.chekiDetails || []).forEach(c => {
+            const name = F.has(c.name) ? to : c.name;
+            const ex = merged.find(x => x.name === name);
+            if (ex) ex.count += c.count; else merged.push({ name, count: c.count });
+          });
+          n = { ...d, chekiDetails: merged };
+        }
+      }
+      if (n) { Store.putLive(n); changed++; }
+    });
+    // 候補
+    if (k === 'groups') {
+      froms.forEach(f => {
+        cand.groups.delete(f);
+        KINDS.forEach(kind => {
+          const set = cand[kind].get(f);
+          if (set) { set.forEach(v => addTo(cand, kind, to, v)); cand[kind].delete(f); }
+        });
+      });
+      cand.groups.add(to);
+      cand.lineups.forEach(l => { if (F.has(l.group)) l.group = to; });
+    } else if (!isScoped(k)) {
+      froms.forEach(f => cand[k].delete(f)); cand[k].add(to);
+    } else {
+      const set = cand[k].get(g);
+      if (set) froms.forEach(f => set.delete(f));
+      addTo(cand, k, g, to);
+    }
+    Store.saveCandidates();
+    return changed;
+  }
 
   $('tab-manage').addEventListener('click', async e => {
     const t = e.target.closest('button');
     if (!t) return;
-    if (t.dataset.gadd) {
-      const k = t.dataset.gadd, inp = $('g-in-' + k), v = inp.value.trim();
+    const d = t.dataset;
+    if (d.add) {
+      const k = d.add, g = scopeGroup(k), v = $('in-' + k).value.trim();
       if (!v) return toast('入力してください', 'error');
-      if (view[k].has(v)) return toast('すでに登録されています');
-      cand[k].add(v); inp.value = ''; Store.saveCandidates(); toast(`「${v}」を追加しました`);
-    } else if (t.dataset.sadd) {
-      const k = t.dataset.sadd, g = $('s-sel-' + k).value, inp = $('s-in-' + k);
-      const values = (k === 'member' ? inp.value.split(/[、,，]/) : [inp.value]).map(s => s.trim()).filter(Boolean);
-      const added = values.filter(v => !(view[k].get(g)?.has(v)) && addTo(cand, k, g, v));
-      if (!added.length) return toast(values.length ? 'すでに登録されています' : '入力してください', values.length ? undefined : 'error');
-      inp.value = ''; Store.saveCandidates(); toast(`「${added.join('、')}」を追加しました`);
-    } else if (t.dataset.gdel || t.dataset.sdel) {
-      const item = t.dataset.item;
-      const isGroup = t.dataset.gdel === 'groups';
+      const same = candItems(k, g).find(x => loose(x) === loose(v));
+      if (same === v) return toast('すでに登録されています');
+      if (same && !await confirmBox(`似た名前「${same}」がすでにあります。「${v}」を別のものとして追加しますか？`)) return;
+      if (isScoped(k)) addTo(cand, k, g, v); else cand[k].add(v);
+      $('in-' + k).value = ''; Store.saveCandidates(); toast(`「${v}」を追加しました`);
+    } else if (d.rename) {
+      editing = { k: d.rename, value: d.item }; renderCandPanel(d.rename);
+      const inp = $('rename-' + d.rename); if (inp) { inp.focus(); inp.select(); }
+    } else if (d.renameCancel) {
+      const k = editing && editing.k; editing = null; if (k) renderCandPanel(k);
+    } else if (d.renameSave) {
+      const k = d.renameSave, g = scopeGroup(k), from = d.item, to = $('rename-' + k).value.trim();
+      if (!to) return toast('新しい名前を入力してください', 'error');
+      if (to === from) { editing = null; return renderCandPanel(k); }
+      const exists = candItems(k, g).includes(to);
+      const n = usageCounts(k, g).get(from) || 0;
+      if (!await confirmBox(`「${from}」を「${to}」${exists ? 'に統合' : 'に変更'}しますか？${n ? `\n${n}件のライブの記録も書き換えます。` : ''}`)) return;
+      editing = null;
+      const changed = renameEverywhere(k, g, [from], to);
+      toast(`「${to}」に${exists ? '統合' : '変更'}しました${changed ? `（${changed}件のライブを更新）` : ''}`);
+    } else if (d.merge) {
+      const k = d.merge, g = scopeGroup(k), to = d.to, froms = JSON.parse(d.from);
+      const uses = usageCounts(k, g), n = froms.reduce((a, f) => a + (uses.get(f) || 0), 0);
+      if (!await confirmBox(`${froms.map(f => `「${f}」`).join('')}を「${to}」に統一しますか？${n ? `\n${n}件のライブの記録も書き換えます。` : ''}`)) return;
+      const changed = renameEverywhere(k, g, froms, to);
+      toast(`「${to}」に統一しました${changed ? `（${changed}件のライブを更新）` : ''}`);
+    } else if (d.del) {
+      const k = d.del, g = scopeGroup(k), item = d.item, isGroup = k === 'groups';
+      const n = usageCounts(k, g).get(item) || 0;
+      if (n) return toast(`「${item}」は${n}件のライブで使われているので削除できません。別の名前に統一するときは「名前を変更」を使ってください`, 'error');
       if (!await confirmBox(`「${item}」を候補から削除しますか？${isGroup ? '（このグループの体制・メンバー・楽曲・衣装・チェキ相手の候補も消えます）' : ''}`)) return;
-      if (t.dataset.gdel) { cand[t.dataset.gdel].delete(item); if (isGroup) { KINDS.forEach(k => cand[k].delete(item)); cand.lineups = cand.lineups.filter(l => l.group !== item); } }
-      else cand[t.dataset.sdel].get(t.dataset.group)?.delete(item);
+      if (isGroup) { cand.groups.delete(item); KINDS.forEach(kind => cand[kind].delete(item)); cand.lineups = cand.lineups.filter(l => l.group !== item); }
+      else if (isScoped(k)) cand[k].get(g)?.delete(item);
+      else cand[k].delete(item);
       await Store.saveCandidates();
-      const still = t.dataset.gdel ? view[t.dataset.gdel].has(item) : view[t.dataset.sdel].get(t.dataset.group)?.has(item);
-      toast(still ? `「${item}」は登録済みのライブで使われているため、候補に残ります` : `「${item}」を削除しました`);
+      toast(`「${item}」を削除しました`);
     }
+  });
+  $('tab-manage').addEventListener('keydown', e => {
+    const inp = e.target.closest('[id^="rename-"]');
+    if (!inp || e.isComposing) return;
+    if (e.key === 'Enter') { e.preventDefault(); inp.closest('li').querySelector('[data-rename-save]').click(); }
+    else if (e.key === 'Escape') inp.closest('li').querySelector('[data-rename-cancel]').click();
   });
 
   // ================= コピー・取り込み・全削除 =================
