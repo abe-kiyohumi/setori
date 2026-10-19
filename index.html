@@ -208,11 +208,11 @@ input.count { width: 76px; }
       <h2 id="formTitle">ライブを記録</h2>
       <div class="grid2">
         <div><label class="lbl req" for="liveDate">日付</label><input type="date" id="liveDate" class="field"></div>
-        <div><label class="lbl req" for="liveType">ライブの種類</label><input id="liveType" class="field" placeholder="定期公演 / 対バン など"></div>
+        <div><label class="lbl" for="liveType">ライブの種類</label><input id="liveType" class="field" placeholder="定期公演 / 対バン など"></div>
       </div>
       <div><label class="lbl" for="liveName">ライブ名</label><input id="liveName" class="field" placeholder="例: 定期公演 vol.12"></div>
       <div class="grid2">
-        <div><label class="lbl req" for="liveVenue">会場</label><input id="liveVenue" class="field" placeholder="一部を入力すると候補が出ます"></div>
+        <div><label class="lbl" for="liveVenue">会場</label><input id="liveVenue" class="field" placeholder="一部を入力すると候補が出ます"></div>
         <div><label class="lbl req" for="liveGroup">グループ</label><input id="liveGroup" class="field" placeholder="一部を入力すると候補が出ます"></div>
       </div>
 
@@ -228,7 +228,7 @@ input.count { width: 76px; }
         </div>
       </div>
 
-      <div><label class="lbl req" for="liveCostume">衣装</label><input id="liveCostume" class="field" placeholder="一部を入力すると候補が出ます"></div>
+      <div><label class="lbl" for="liveCostume">衣装</label><input id="liveCostume" class="field" placeholder="一部を入力すると候補が出ます"></div>
 
       <div class="panel inset">
         <h3>チェキ</h3>
@@ -669,7 +669,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       setlist: splitSongs(F.setlist.value).join('\n'), memo: F.memo.value.trim(),
       createdAt: old?.createdAt || Date.now(), updatedAt: Date.now(),
     };
-    const missing = [['日付', entry.date], ['種類', entry.liveType], ['会場', entry.venue], ['グループ', entry.group], ['衣装', entry.costume], ['セットリスト', entry.setlist]]
+    const missing = [['日付', entry.date], ['グループ', entry.group], ['セットリスト', entry.setlist]]
       .filter(([, v]) => !v).map(([k]) => k);
     if (missing.length) { toast(`${missing.join('・')}を入力してください`, 'error'); return; }
     const wasEdit = !!editingId;
@@ -717,8 +717,8 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     return `<article class="live">
       <div class="meta">
         <span class="date">${esc(d.date)}</span>
-        <span class="name">${esc(d.liveName || d.liveType)}</span>
-        <span class="sub"><span class="tag">${esc(d.liveType)}</span><b>${esc(d.group || '—')}</b> ／ ${esc(d.venue)} ／ 衣装: ${esc(d.costume)}</span>
+        <span class="name">${esc(d.liveName || d.liveType || 'ライブ')}</span>
+        <span class="sub">${d.liveType ? `<span class="tag">${esc(d.liveType)}</span>` : ''}<b>${esc(d.group || '—')}</b> ／ ${esc(d.venue || '会場未記録')} ／ 衣装: ${esc(d.costume || '未記録')}</span>
         ${d.members && d.members.length ? `<span class="sub">メンバー: ${esc(d.members.join('、'))}</span>` : ''}
         ${cheki ? `<span class="sub">チェキ: ${cheki}</span>` : ''}
         ${deleted ? '' : `<details><summary>セットリスト（${songs.length}曲）</summary><ol>${songs.map(s => `<li>${esc(s)}</li>`).join('')}</ol></details>`}
@@ -887,13 +887,13 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     let arr;
     try { const p = JSON.parse($('pasteDataTextarea').value.trim()); arr = Array.isArray(p) ? p : [p]; }
     catch (e) { return say('JSONとして読み取れませんでした。コピーした内容をそのまま貼り付けてください。'); }
-    const valid = arr.filter(d => d && d.date && d.liveType && d.venue && d.costume && typeof d.group === 'string' && d.setlist);
+    const valid = arr.filter(d => d && d.date && typeof d.group === 'string' && d.group && d.setlist);
     if (!valid.length) return say('取り込めるライブデータが見つかりませんでした。');
     const btn = $('importDataButton'); btn.disabled = true;
     let n = 0;
     try {
       for (const d of valid) {
-        const entry = { ...stripMeta(d), members: Array.isArray(d.members) ? d.members : [], chekiDetails: d.chekiDetails || [], id: genId(), createdAt: Date.now() + n, updatedAt: Date.now() };
+        const entry = { liveType: '', venue: '', costume: '', liveName: '', memo: '', ...stripMeta(d), members: Array.isArray(d.members) ? d.members : [], chekiDetails: d.chekiDetails || [], id: genId(), createdAt: Date.now() + n, updatedAt: Date.now() };
         Store.putLive(entry); n++;
         
       }
