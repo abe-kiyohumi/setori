@@ -1,0 +1,1168 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#c92c68">
+<title>セトリ記録帳</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700&family=Noto+Sans+JP:wght@400;500;700&display=swap">
+<style>
+body { margin: 0; }
+:root { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+
+/* Layout: 1カラムの作業帳。上部固定タブで「記録する / 一覧 / ランキング / 候補」を切り替え。ペンライトのピンクをアクセントに一点だけ使う */
+:root {
+  --bg: #f6f3f8; --surface: #ffffff; --surface-2: #efeaf3; --ink: #251e2d; --muted: #6c637a; --line: #ddd5e5;
+  --accent: #c92c68; --accent-ink: #ffffff; --accent-soft: #fae3ec;
+  --ok: #1d7f55; --ok-soft: #e1f3ea; --warn: #a65f0c; --warn-soft: #fbefdc; --danger: #c22f2f; --danger-soft: #fbe5e5;
+  --mark: #ffe69a; --shadow: 0 8px 24px rgba(48, 22, 60, 0.12);
+  --f-display: "Zen Maru Gothic", "Hiragino Maru Gothic ProN", "Noto Sans JP", sans-serif;
+  --f-body: "Noto Sans JP", "Hiragino Sans", "Yu Gothic UI", "Meiryo", sans-serif;
+  --r: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #15111a; --surface: #201a27; --surface-2: #2a2232; --ink: #f0eaf5; --muted: #a89fb4; --line: #3b3247;
+    --accent: #ff6b9f; --accent-ink: #22101a; --accent-soft: #3d1d2c;
+    --ok: #4fc892; --ok-soft: #173327; --warn: #eaa54f; --warn-soft: #3a2a14; --danger: #ff7d7d; --danger-soft: #3b1c1f;
+    --mark: #6b5414; --shadow: 0 8px 24px rgba(0, 0, 0, 0.45); color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #15111a; --surface: #201a27; --surface-2: #2a2232; --ink: #f0eaf5; --muted: #a89fb4; --line: #3b3247;
+  --accent: #ff6b9f; --accent-ink: #22101a; --accent-soft: #3d1d2c;
+  --ok: #4fc892; --ok-soft: #173327; --warn: #eaa54f; --warn-soft: #3a2a14; --danger: #ff7d7d; --danger-soft: #3b1c1f;
+  --mark: #6b5414; --shadow: 0 8px 24px rgba(0, 0, 0, 0.45); color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+#loginGate { display: none; }
+body.signed-out #loginGate { display: flex; }
+body.signed-out section.tab, body.signed-out .tabs { display: none !important; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.6; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.wrap { max-width: 860px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+
+/* ヘッダー＆タブ */
+.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
+.top .wrap { display: flex; flex-direction: column; gap: 6px; padding-block: 12px 0; }
+.brand { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+h1 { font-family: var(--f-display); font-size: 1.45rem; margin: 0; letter-spacing: 0.02em; text-wrap: balance; }
+.sync { display: inline-flex; align-items: center; gap: 6px; font-size: 0.78rem; padding: 3px 10px; border-radius: 999px; background: var(--surface-2); color: var(--muted); }
+.sync::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.sync.cloud { background: var(--ok-soft); color: var(--ok); } .sync.cloud::before { background: var(--ok); }
+.sync.local { background: var(--warn-soft); color: var(--warn); } .sync.local::before { background: var(--warn); }
+.sync.error { background: var(--danger-soft); color: var(--danger); } .sync.error::before { background: var(--danger); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
+.tabs button { flex: 0 0 auto; background: none; border: 0; border-bottom: 3px solid transparent; padding: 8px 12px; font: inherit; font-weight: 500; color: var(--muted); cursor: pointer; }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); font-weight: 700; }
+.tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+main.wrap { padding-block: 20px 60px; display: flex; flex-direction: column; gap: 20px; }
+section.tab { display: flex; flex-direction: column; gap: 20px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 18px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.panel h2 { font-family: var(--f-display); font-size: 1.15rem; margin: 0; }
+.panel h3 { font-size: 0.95rem; margin: 0; }
+.panel.inset { background: var(--surface-2); border-color: transparent; }
+.hint { color: var(--muted); font-size: 0.85rem; margin: 0; }
+.row { display: flex; gap: 8px; align-items: flex-start; flex-wrap: wrap; }
+.row > .grow { flex: 1 1 200px; min-width: 0; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+
+label.lbl { display: block; font-size: 0.82rem; font-weight: 500; color: var(--muted); margin-bottom: 4px; letter-spacing: 0.03em; }
+.req::after { content: " *"; color: var(--accent); }
+.field { width: 100%; padding: 9px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); font: inherit; }
+textarea.field { resize: vertical; line-height: 1.55; }
+.field:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.field:disabled { opacity: 0.55; }
+input.count { width: 76px; }
+
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; font-weight: 500; padding: 8px 14px; border-radius: 8px; cursor: pointer; white-space: nowrap; }
+.btn:hover { background: var(--surface-2); }
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
+.btn.primary:hover { filter: brightness(1.06); }
+.btn.danger { color: var(--danger); border-color: var(--danger); background: transparent; }
+.btn.danger:hover { background: var(--danger-soft); }
+.btn.sm { padding: 4px 10px; font-size: 0.82rem; }
+.btn.block { width: 100%; }
+.actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.actions .btn { flex: 1 1 160px; }
+
+/* 部分一致の候補 */
+.ac { position: relative; }
+.ac-box { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 30; margin: 0; padding: 4px 0; list-style: none; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); max-height: 260px; overflow-y: auto; }
+.ac-item { padding: 7px 12px; cursor: pointer; }
+.ac-item:hover, .ac-item.active { background: var(--accent-soft); }
+.ac-item mark, .hl { background: var(--mark); color: inherit; border-radius: 2px; }
+.ac-more { padding: 5px 12px; font-size: 0.78rem; color: var(--muted); }
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: inline-flex; align-items: center; gap: 4px; background: var(--accent-soft); color: var(--ink); border-radius: 999px; padding: 3px 4px 3px 12px; font-size: 0.88rem; }
+.chip button { border: 0; background: transparent; color: var(--muted); width: 22px; height: 22px; border-radius: 50%; cursor: pointer; font-size: 0.9rem; line-height: 1; }
+.chip button:hover { background: var(--danger-soft); color: var(--danger); }
+.empty { color: var(--muted); font-size: 0.88rem; margin: 0; }
+
+/* 解析結果 */
+.result dl { display: grid; grid-template-columns: 6.5em 1fr; gap: 4px 12px; margin: 0; font-size: 0.9rem; }
+.result dt { color: var(--muted); }
+.result dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.result .miss { color: var(--warn); }
+.result .note { color: var(--muted); font-size: 0.8rem; margin-left: 6px; }
+
+/* 一覧 */
+.stats { display: flex; gap: 24px; flex-wrap: wrap; }
+.stat b { font-family: var(--f-display); font-size: 1.6rem; font-variant-numeric: tabular-nums; color: var(--accent); margin-right: 4px; }
+.lives { display: flex; flex-direction: column; gap: 10px; }
+.live { border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); padding: 14px; display: grid; grid-template-columns: 1fr auto; gap: 10px; }
+.live .meta { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.live .date { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 0.85rem; }
+.live .name { font-weight: 700; font-size: 1.02rem; overflow-wrap: anywhere; }
+.live .sub { font-size: 0.88rem; color: var(--muted); overflow-wrap: anywhere; }
+.live .sub b { color: var(--ink); font-weight: 500; }
+.live details { margin-top: 4px; font-size: 0.88rem; }
+.live summary { cursor: pointer; color: var(--accent); }
+.live ol { margin: 6px 0 0; padding-left: 1.8em; }
+.live .memo { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted); font-size: 0.85rem; margin-top: 4px; }
+.live .btns { display: flex; flex-direction: column; gap: 6px; }
+.tag { display: inline-block; font-size: 0.75rem; padding: 1px 8px; border-radius: 999px; background: var(--surface-2); color: var(--muted); margin-right: 4px; }
+.deleted .live { background: var(--surface-2); }
+
+/* ランキング */
+.rank { list-style: none; margin: 0; padding: 0; max-height: 360px; overflow-y: auto; }
+.rank li { display: grid; grid-template-columns: 2.2em 1fr auto; gap: 6px; align-items: baseline; padding: 5px 0; border-bottom: 1px solid var(--line); font-size: 0.92rem; }
+.rank li:last-child { border-bottom: 0; }
+.rank .no { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 0.82rem; }
+.rank .no.top { color: var(--accent); font-weight: 700; }
+.rank .n { font-variant-numeric: tabular-nums; color: var(--muted); white-space: nowrap; }
+.rank .item { min-width: 0; overflow-wrap: anywhere; }
+
+/* 候補 */
+.cand { list-style: none; margin: 0; padding: 0; max-height: 220px; overflow-y: auto; }
+.cand li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--line); font-size: 0.92rem; }
+.cand li span { min-width: 0; overflow-wrap: anywhere; }
+.cand li:last-child { border-bottom: 0; }
+
+/* トースト・モーダル */
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 50; max-width: min(92vw, 520px); padding: 10px 16px; border-radius: 10px; box-shadow: var(--shadow); font-size: 0.92rem; background: var(--ink); color: var(--bg); }
+.toast.error { background: var(--danger); color: #fff; }
+.modal { position: fixed; inset: 0; z-index: 60; background: rgba(15, 8, 20, 0.55); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.modal .box { background: var(--surface); border-radius: 12px; padding: 20px; width: 100%; max-width: 520px; display: flex; flex-direction: column; gap: 14px; box-shadow: var(--shadow); }
+.modal .box p { margin: 0; }
+@media (prefers-reduced-motion: no-preference) { .toast { transition: opacity .2s; } }
+@media (max-width: 520px) {
+  .live { grid-template-columns: 1fr; }
+  .live .btns { flex-direction: row; }
+  .live .btns .btn { flex: 1; }
+}
+</style>
+</head>
+<body class="signed-out">
+<header class="top">
+  <div class="wrap">
+    <div class="brand">
+      <h1>セトリ記録帳</h1>
+      <div class="row" style="align-items:center">
+        <span id="syncStatus" class="sync">接続中…</span>
+        <span id="userName" class="hint"></span>
+        <button type="button" id="authBtn" class="btn sm">ログイン</button>
+      </div>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button role="tab" data-tab="entry" aria-selected="true">記録する</button>
+      <button role="tab" data-tab="list" aria-selected="false">ライブ一覧</button>
+      <button role="tab" data-tab="ranking" aria-selected="false">ランキング</button>
+      <button role="tab" data-tab="manage" aria-selected="false">候補の管理</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <section id="loginGate" class="panel">
+    <h2>ログインしてください</h2>
+    <p class="hint">Googleアカウントでログインすると、PC・スマホのどれからでも同じライブデータを見たり記録したりできます。データはあなたのアカウントだけが読み書きできます。</p>
+    <button type="button" id="loginBtn" class="btn primary">Googleでログイン</button>
+  </section>
+  <!-- ========== 記録する ========== -->
+  <section class="tab" id="tab-entry">
+    <div class="panel inset">
+      <h2>Xのセトリツイートから読み込む</h2>
+      <p class="hint">ツイート本文をそのまま貼り付けて「解析して反映」を押すと、日付・会場・グループ・ライブ名と種類・メンバー・衣装・セットリストを下のフォームに入れます。</p>
+      <textarea id="tweetText" class="field" rows="7" placeholder="【セトリ】10/18(土) 定期公演 vol.12&#10;@渋谷CYCLONE&#10;M1 曲A&#10;M2 曲B&#10;EN 曲C&#10;#なみだ色の消しごむ"></textarea>
+      <div>
+        <label class="lbl" for="tweetUrl">元ツイートのURL（任意・メモに残します）</label>
+        <input id="tweetUrl" class="field" type="url" placeholder="https://x.com/…/status/…">
+      </div>
+      <div class="actions">
+        <button type="button" id="parseTweetBtn" class="btn primary">解析して反映</button>
+        <button type="button" id="clearTweetBtn" class="btn">クリア</button>
+      </div>
+      <div id="parseResult" class="result panel" hidden></div>
+    </div>
+
+    <form id="liveEntryForm" class="panel" autocomplete="off">
+      <h2 id="formTitle">ライブを記録</h2>
+      <div class="grid2">
+        <div><label class="lbl req" for="liveDate">日付</label><input type="date" id="liveDate" class="field"></div>
+        <div><label class="lbl req" for="liveType">ライブの種類</label><input id="liveType" class="field" placeholder="定期公演 / 対バン など"></div>
+      </div>
+      <div><label class="lbl" for="liveName">ライブ名</label><input id="liveName" class="field" placeholder="例: 定期公演 vol.12"></div>
+      <div class="grid2">
+        <div><label class="lbl req" for="liveVenue">会場</label><input id="liveVenue" class="field" placeholder="一部を入力すると候補が出ます"></div>
+        <div><label class="lbl req" for="liveGroup">グループ</label><input id="liveGroup" class="field" placeholder="一部を入力すると候補が出ます"></div>
+      </div>
+
+      <div class="panel inset">
+        <div class="row" style="justify-content:space-between;align-items:center">
+          <h3>出演メンバー</h3>
+          <button type="button" id="addAllMembersBtn" class="btn sm">グループの全員を追加</button>
+        </div>
+        <div id="memberChips" class="chips"></div>
+        <div class="row">
+          <div class="grow"><input id="memberInput" class="field" placeholder="メンバー名（一部で候補表示）"></div>
+          <button type="button" id="addMemberBtn" class="btn">追加</button>
+        </div>
+      </div>
+
+      <div><label class="lbl req" for="liveCostume">衣装</label><input id="liveCostume" class="field" placeholder="一部を入力すると候補が出ます"></div>
+
+      <div class="panel inset">
+        <h3>チェキ</h3>
+        <div id="chekiChips" class="chips"></div>
+        <div class="row">
+          <div class="grow"><input id="chekiPartnerInput" class="field" placeholder="チェキ相手（一部で候補表示）"></div>
+          <input id="chekiCountInput" class="field count" type="number" min="1" value="1" aria-label="枚数">
+          <button type="button" id="addChekiBtn" class="btn">追加</button>
+        </div>
+      </div>
+
+      <div>
+        <label class="lbl req" for="liveSetlist">セットリスト（1行に1曲）</label>
+        <textarea id="liveSetlist" class="field" rows="7" placeholder="曲A&#10;曲B&#10;曲C"></textarea>
+        <div class="row" style="margin-top:8px">
+          <div class="grow"><input id="addSongInput" class="field" placeholder="既存の曲を追加（一部を入力すると候補が出ます）"></div>
+          <button type="button" id="addSongButton" class="btn">追加</button>
+        </div>
+      </div>
+
+      <div><label class="lbl" for="liveMemo">ライブメモ</label><textarea id="liveMemo" class="field" rows="3" placeholder="感想・特典会のことなど"></textarea></div>
+
+      <div class="actions">
+        <button type="submit" id="submitButton" class="btn primary">保存する</button>
+        <button type="button" id="cancelEditButton" class="btn" hidden>編集をやめる</button>
+      </div>
+    </form>
+  </section>
+
+  <!-- ========== 一覧 ========== -->
+  <section class="tab" id="tab-list" hidden>
+    <div class="panel">
+      <div class="grid2">
+        <div><label class="lbl" for="yearFilter">年</label><select id="yearFilter" class="field"><option value="all">すべて</option></select></div>
+        <div><label class="lbl" for="groupFilter">グループ</label><select id="groupFilter" class="field"><option value="all">すべて</option></select></div>
+        <div><label class="lbl" for="sortOrder">並び順</label><select id="sortOrder" class="field"><option value="desc">新しい順</option><option value="asc">古い順</option></select></div>
+      </div>
+      <div class="stats">
+        <span class="stat"><b id="liveCount">0</b>ライブ</span>
+        <span class="stat"><b id="totalSongsCount">0</b>曲（のべ）</span>
+      </div>
+      <div class="actions">
+        <button type="button" id="copyAllDataButton" class="btn">表示中のデータをコピー</button>
+        <button type="button" id="pasteDataButton" class="btn">データを貼り付けて取り込む</button>
+      </div>
+    </div>
+    <div id="liveDataList" class="lives"></div>
+
+    <div class="panel inset deleted">
+      <h2>最近削除したライブ</h2>
+      <div id="deletedLiveDataList" class="lives"></div>
+      <div class="actions">
+        <button type="button" id="restoreAllDeletedData" class="btn">すべて復元</button>
+        <button type="button" id="clearDeletedData" class="btn danger">すべて完全に削除</button>
+      </div>
+    </div>
+    <button type="button" id="clearAllData" class="btn danger block">すべてのデータを削除</button>
+  </section>
+
+  <!-- ========== ランキング ========== -->
+  <section class="tab" id="tab-ranking" hidden>
+    <div class="panel">
+      <p class="hint">年・グループで絞り込んで集計します（「ライブ一覧」の絞り込みと連動）。</p>
+      <div class="grid2">
+        <div><label class="lbl" for="yearFilter2">年</label><select id="yearFilter2" class="field"></select></div>
+        <div><label class="lbl" for="groupFilter2">グループ</label><select id="groupFilter2" class="field"></select></div>
+      </div>
+    </div>
+    <div class="cards">
+      <div class="panel"><h3>セットリスト</h3><ol id="setlistRanking" class="rank"></ol></div>
+      <div class="panel"><h3>会場</h3><ol id="venueRanking" class="rank"></ol></div>
+      <div class="panel"><h3>衣装</h3><ol id="costumeRanking" class="rank"></ol></div>
+      <div class="panel"><h3>メンバー出演</h3><ol id="memberRanking" class="rank"></ol></div>
+      <div class="panel"><h3>チェキ相手</h3><ol id="chekiRanking" class="rank"></ol></div>
+    </div>
+  </section>
+
+  <!-- ========== 候補の管理 ========== -->
+  <section class="tab" id="tab-manage" hidden>
+    <p class="hint">ここに登録した候補は、入力欄で文字の一部を打つと表示されます。ライブで使った項目は自動で候補に入ります。</p>
+    <div class="cards" id="globalManage"></div>
+    <div class="cards" id="scopedManage"></div>
+  </section>
+</main>
+
+<div id="toast" class="toast" hidden></div>
+
+<div id="confirmModal" class="modal" hidden>
+  <div class="box" role="dialog" aria-modal="true">
+    <p id="confirmMessage"></p>
+    <div class="actions">
+      <button type="button" id="confirmOk" class="btn primary">はい</button>
+      <button type="button" id="confirmCancel" class="btn">キャンセル</button>
+    </div>
+  </div>
+</div>
+
+<div id="pasteModal" class="modal" hidden>
+  <div class="box" role="dialog" aria-modal="true">
+    <h2 style="margin:0;font-family:var(--f-display);font-size:1.1rem">ライブデータを取り込む</h2>
+    <p class="hint">以前のページ（idol2.html など）の「全データをコピー」で出したJSONを貼り付けてください。</p>
+    <textarea id="pasteDataTextarea" class="field" rows="8" placeholder='[{"date":"2025-07-01","liveType":"ワンマンライブ", …}]'></textarea>
+    <p id="pasteModalMessage" class="hint" hidden></p>
+    <div class="actions">
+      <button type="button" id="importDataButton" class="btn primary">取り込む</button>
+      <button type="button" id="cancelPasteButton" class="btn">キャンセル</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, doc, setDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+
+// ▼ Firebase の設定（Firebaseコンソール → プロジェクトの設定 → マイアプリ でコピーしたもの）
+const firebaseConfig = {
+  apiKey: "AIzaSyADVB8rTigOQXXGPuYcH9hKWPyL3DacpOA",
+  authDomain: "idol-live.firebaseapp.com",
+  projectId: "idol-live",
+  storageBucket: "idol-live.firebasestorage.app",
+  messagingSenderId: "524444946582",
+  appId: "1:524444946582:web:53fee236ae8efb4f3132b7",
+};
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });
+
+(() => {
+  const $ = id => document.getElementById(id);
+
+  // ================= ユーティリティ =================
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  // 比較用の正規化（全角半角・大文字小文字・カタカナ/ひらがな・空白を区別しない）
+  const norm = s => String(s ?? '').normalize('NFKC').toLowerCase()
+    .replace(/[ァ-ヶ]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x60))
+    .replace(/[\s　]+/g, '');
+  const splitSongs = s => String(s || '').split(/[\n,]/).map(x => x.trim()).filter(Boolean);
+  const sortJa = arr => [...arr].sort((a, b) => a.localeCompare(b, 'ja'));
+  const pad = n => String(n).padStart(2, '0');
+  const genId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const clone = o => JSON.parse(JSON.stringify(o));
+
+  // ================= 状態 =================
+  const DEFAULT_TYPES = ['ワンマンライブ', '対バン', '定期公演', '主催ライブ', '生誕祭', '周年ライブ', 'フェス', 'リリースイベント', '配信ライブ'];
+  const KINDS = ['member', 'song', 'costume', 'cheki'];
+  let liveData = [], deletedLiveData = [];
+  let cand = emptyCandidates();      // 保存されている候補
+  let view = emptyCandidates();      // 保存候補 ＋ ライブデータから集めた候補（表示用）
+  let currentCheki = [], currentMembers = [];
+  let editingId = null, fYear = 'all', fGroup = 'all', sortOrder = 'desc';
+
+  function emptyCandidates() {
+    return { venues: new Set(), groups: new Set(), liveTypes: new Set(DEFAULT_TYPES), member: new Map(), song: new Map(), costume: new Map(), cheki: new Map() };
+  }
+  function candToJSON(c) {
+    const o = { venues: [...c.venues], groups: [...c.groups], liveTypes: [...c.liveTypes] };
+    KINDS.forEach(k => { o[k] = {}; c[k].forEach((set, g) => { o[k][g] = [...set]; }); });
+    return o;
+  }
+  function candFromJSON(o) {
+    const c = emptyCandidates();
+    if (!o) return c;
+    c.venues = new Set(o.venues || []); c.groups = new Set(o.groups || []);
+    c.liveTypes = new Set(o.liveTypes && o.liveTypes.length ? o.liveTypes : DEFAULT_TYPES);
+    KINDS.forEach(k => Object.entries(o[k] || {}).forEach(([g, items]) => c[k].set(g, new Set(items))));
+    return c;
+  }
+  function addTo(c, kind, group, item) {
+    item = String(item || '').trim(); group = String(group || '').trim();
+    if (!item || !group) return false;
+    if (!c[kind].has(group)) c[kind].set(group, new Set());
+    if (c[kind].get(group).has(item)) return false;
+    c[kind].get(group).add(item);
+    return true;
+  }
+  // 保存済み候補 + ライブデータ中の項目 = 表示用候補
+  function rebuildView() {
+    view = candFromJSON(candToJSON(cand));
+    liveData.forEach(d => {
+      const g = (d.group || '').trim();
+      if (g) view.groups.add(g);
+      if ((d.venue || '').trim()) view.venues.add(d.venue.trim());
+      if ((d.liveType || '').trim()) view.liveTypes.add(d.liveType.trim());
+      if (!g) return;
+      addTo(view, 'costume', g, d.costume);
+      splitSongs(d.setlist).forEach(s => addTo(view, 'song', g, s));
+      (d.chekiDetails || []).forEach(c => addTo(view, 'cheki', g, c.name));
+      (d.members || []).forEach(m => addTo(view, 'member', g, m));
+    });
+  }
+  // グループ指定あり → そのグループの候補、なければ全グループ分
+  function gItems(kind, group) {
+    group = String(group || '').trim();
+    const m = view[kind];
+    if (group && m.has(group) && m.get(group).size) return [...m.get(group)];
+    const all = new Set();
+    m.forEach(set => set.forEach(v => all.add(v)));
+    return [...all];
+  }
+
+  // ================= 保存先（Firebase / Firestore） =================
+  // データの場所: users/{ログインしたユーザーのID}/lives/{ライブID} と users/{ID}/meta/candidates
+  const Store = {
+    mode: 'connecting', uid: null, unsubs: [], candChain: Promise.resolve(),
+    init() {
+      onAuthStateChanged(auth, user => {
+        this.unsubs.forEach(u => u()); this.unsubs = [];
+        liveData = []; deletedLiveData = []; cand = emptyCandidates();
+        showAuth(user);
+        if (!user) { this.uid = null; this.mode = 'signedout'; setSync(); renderAll(); return; }
+        this.uid = user.uid; this.mode = 'cloud'; setSync();
+        this.unsubs.push(onSnapshot(collection(fs, 'users', user.uid, 'lives'), { includeMetadataChanges: true }, snap => {
+          const all = snap.docs.map(d => ({ ...d.data(), id: d.id }));
+          liveData = all.filter(x => !x.deleted);
+          deletedLiveData = all.filter(x => x.deleted).sort((a, b) => (b.deletedAt || 0) - (a.deletedAt || 0));
+          setSync(snap.metadata.fromCache ? 'offline' : 'cloud');
+          renderAll();
+        }, writeError));
+        this.unsubs.push(onSnapshot(doc(fs, 'users', user.uid, 'meta', 'candidates'), s => {
+          cand = candFromJSON(s.exists() ? s.data() : null);
+          renderAll();
+        }, writeError));
+      });
+    },
+    // ライブ1件を書き込む（画面にはすぐ反映。オフラインでも端末に保存され、つながったら同期）
+    putLive(entry) {
+      const { id, ...body } = entry;
+      [liveData, deletedLiveData].forEach(arr => { const i = arr.findIndex(x => x.id === id); if (i >= 0) arr.splice(i, 1); });
+      (entry.deleted ? deletedLiveData : liveData).push(entry);
+      renderAll();
+      setDoc(doc(fs, 'users', this.uid, 'lives', id), JSON.parse(JSON.stringify(body))).catch(writeError);
+    },
+    purgeLive(id) {
+      liveData = liveData.filter(x => x.id !== id);
+      deletedLiveData = deletedLiveData.filter(x => x.id !== id);
+      renderAll();
+      deleteDoc(doc(fs, 'users', this.uid, 'lives', id)).catch(writeError);
+    },
+    saveCandidates() {
+      renderAll();
+      setDoc(doc(fs, 'users', this.uid, 'meta', 'candidates'), candToJSON(cand)).catch(writeError);
+      return Promise.resolve();
+    },
+  };
+  function writeError(e) {
+    const c = (e && e.code) || '';
+    const msg = c.includes('permission-denied') ? '保存できませんでした。Firestoreのセキュリティルールが設定されているか確認してください。'
+      : c.includes('resource-exhausted') ? 'Firebaseの無料枠の上限に達しました。しばらくしてからお試しください。'
+      : '保存できませんでした。通信状態を確認して、もう一度お試しください。';
+    console.error(e);
+    toast(msg, 'error');
+    setSync('error');
+  }
+  function setSync(state) {
+    const el = $('syncStatus');
+    const s = state || Store.mode;
+    el.className = 'sync ' + ({ cloud: 'cloud', offline: 'local', error: 'error' }[s] || '');
+    el.textContent = { cloud: 'クラウド同期中', offline: 'オフライン（あとで同期）', error: '同期エラー', signedout: '未ログイン' }[s] || '接続中…';
+  }
+  // ================= ログイン =================
+  function showAuth(user) {
+    document.body.classList.toggle('signed-out', !user);
+    $('authBtn').textContent = user ? 'ログアウト' : 'ログイン';
+    $('userName').textContent = user ? (user.displayName || user.email || '') : '';
+  }
+  async function login() {
+    const provider = new GoogleAuthProvider();
+    try { await signInWithPopup(auth, provider); }
+    catch (e) {
+      const c = e.code || '';
+      if (c === 'auth/popup-blocked' || c === 'auth/operation-not-supported-in-environment') return signInWithRedirect(auth, provider);
+      if (c === 'auth/unauthorized-domain') return toast('このサイトのドメインがFirebaseに登録されていません。Authentication → 設定 → 承認済みドメインに追加してください。', 'error');
+      if (c !== 'auth/popup-closed-by-user' && c !== 'auth/cancelled-popup-request') toast('ログインできませんでした: ' + c, 'error');
+    }
+  }
+  $('authBtn').addEventListener('click', async () => {
+    if (Store.uid) { if (await confirmBox('ログアウトしますか？')) signOut(auth); }
+    else login();
+  });
+  $('loginBtn').addEventListener('click', login);
+
+  // ================= トースト・確認 =================
+  let toastTimer;
+  function toast(msg, type) {
+    const t = $('toast');
+    t.textContent = msg; t.className = 'toast' + (type === 'error' ? ' error' : ''); t.hidden = false;
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, type === 'error' ? 5000 : 2600);
+  }
+  function confirmBox(message) {
+    return new Promise(resolve => {
+      $('confirmMessage').textContent = message;
+      $('confirmModal').hidden = false;
+      const done = v => { $('confirmModal').hidden = true; $('confirmOk').onclick = $('confirmCancel').onclick = null; resolve(v); };
+      $('confirmOk').onclick = () => done(true);
+      $('confirmCancel').onclick = () => done(false);
+    });
+  }
+
+  // ================= タブ =================
+  document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
+  function showTab(name) {
+    document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === name)));
+    document.querySelectorAll('section.tab').forEach(s => { s.hidden = s.id !== 'tab-' + name; });
+    try { localStorage.setItem('setori-tab', name); } catch (e) { }
+    window.scrollTo({ top: 0 });
+  }
+
+  // ================= 部分一致オートコンプリート =================
+  function highlight(v, q) {
+    q = q.trim();
+    const i = q ? v.toLowerCase().indexOf(q.toLowerCase()) : -1;
+    if (i < 0) return esc(v);
+    return esc(v.slice(0, i)) + '<mark>' + esc(v.slice(i, i + q.length)) + '</mark>' + esc(v.slice(i + q.length));
+  }
+  function attachAutocomplete(input, getItems, opts = {}) {
+    const wrap = document.createElement('div');
+    wrap.className = 'ac';
+    input.parentNode.insertBefore(wrap, input);
+    wrap.appendChild(input);
+    const box = document.createElement('ul');
+    box.className = 'ac-box'; box.hidden = true;
+    wrap.appendChild(box);
+    let items = [], active = -1;
+    const LIMIT = 40;
+    const hide = () => { box.hidden = true; active = -1; };
+    function render() {
+      const raw = input.value, q = norm(raw);
+      const matched = getItems().filter(Boolean).map(v => ({ v, n: norm(v) })).filter(o => !q || o.n.includes(q));
+      matched.sort((a, b) => ((a.n.startsWith(q) ? 0 : 1) - (b.n.startsWith(q) ? 0 : 1)) || a.v.localeCompare(b.v, 'ja'));
+      items = matched.slice(0, LIMIT).map(o => o.v);
+      if (!items.length || (items.length === 1 && items[0] === raw)) { hide(); return; }
+      box.innerHTML = items.map((v, i) => `<li class="ac-item${i === active ? ' active' : ''}" data-i="${i}">${highlight(v, raw)}</li>`).join('')
+        + (matched.length > LIMIT ? `<li class="ac-more">ほか ${matched.length - LIMIT} 件（文字を足して絞り込み）</li>` : '');
+      box.hidden = false;
+    }
+    function pick(i) {
+      const v = items[i];
+      if (v === undefined) return;
+      hide();
+      if (opts.onPick) opts.onPick(v); else input.value = v;
+    }
+    input.addEventListener('input', () => { active = -1; render(); });
+    input.addEventListener('focus', () => { active = -1; render(); });
+    input.addEventListener('blur', () => setTimeout(hide, 200));
+    input.addEventListener('keydown', e => {
+      const open = !box.hidden;
+      if (open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+        e.preventDefault();
+        active = e.key === 'ArrowDown' ? Math.min(items.length - 1, active + 1) : Math.max(0, active - 1);
+        box.querySelectorAll('.ac-item').forEach((li, i) => li.classList.toggle('active', i === active));
+        box.querySelectorAll('.ac-item')[active]?.scrollIntoView({ block: 'nearest' });
+      } else if (e.key === 'Enter' && !e.isComposing) {
+        e.preventDefault();
+        if (open && active >= 0) pick(active);
+        else { hide(); if (opts.onEnter) opts.onEnter(input.value); }
+      } else if (e.key === 'Escape') hide();
+    });
+    box.addEventListener('mousedown', e => e.preventDefault());
+    box.addEventListener('click', e => { const li = e.target.closest('.ac-item'); if (li) pick(+li.dataset.i); });
+  }
+
+  const F = {
+    date: $('liveDate'), type: $('liveType'), name: $('liveName'), venue: $('liveVenue'), group: $('liveGroup'),
+    costume: $('liveCostume'), setlist: $('liveSetlist'), memo: $('liveMemo'),
+  };
+  const curGroup = () => F.group.value.trim();
+  attachAutocomplete(F.type, () => [...view.liveTypes]);
+  attachAutocomplete(F.venue, () => [...view.venues]);
+  attachAutocomplete(F.group, () => [...view.groups]);
+  attachAutocomplete(F.costume, () => gItems('costume', curGroup()));
+  attachAutocomplete($('memberInput'), () => gItems('member', curGroup()).filter(m => !currentMembers.includes(m)), { onPick: addMember, onEnter: addMember });
+  attachAutocomplete($('chekiPartnerInput'), () => [...new Set([...gItems('cheki', curGroup()), ...gItems('member', curGroup())])], { onEnter: () => addCheki() });
+  attachAutocomplete($('addSongInput'), () => gItems('song', curGroup()), { onPick: addSong, onEnter: addSong });
+  $('liveEntryForm').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') e.preventDefault(); });
+
+  // ================= メンバー / チェキ / 曲 =================
+  function renderMembers() {
+    $('memberChips').innerHTML = currentMembers.length
+      ? currentMembers.map((m, i) => `<span class="chip">${esc(m)}<button type="button" data-i="${i}" aria-label="${esc(m)}を外す">×</button></span>`).join('')
+      : '<p class="empty">まだ入っていません</p>';
+  }
+  $('memberChips').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { currentMembers.splice(+b.dataset.i, 1); renderMembers(); } });
+  function addMember(name) {
+    const names = String(name || '').split(/[、,，]/).map(s => s.trim()).filter(Boolean);
+    if (!names.length) { toast('メンバー名を入力してください', 'error'); return; }
+    names.forEach(n => { if (!currentMembers.includes(n)) currentMembers.push(n); });
+    $('memberInput').value = '';
+    renderMembers();
+  }
+  $('addMemberBtn').addEventListener('click', () => addMember($('memberInput').value));
+  $('addAllMembersBtn').addEventListener('click', () => {
+    const g = curGroup();
+    const list = g && view.member.has(g) ? [...view.member.get(g)] : [];
+    if (!list.length) { toast(g ? `「${g}」のメンバーが未登録です。「候補の管理」で登録できます` : '先にグループを入力してください', 'error'); return; }
+    list.forEach(m => { if (!currentMembers.includes(m)) currentMembers.push(m); });
+    renderMembers();
+  });
+
+  function renderCheki() {
+    $('chekiChips').innerHTML = currentCheki.length
+      ? currentCheki.map((c, i) => `<span class="chip">${esc(c.name)} ×${c.count}<button type="button" data-i="${i}" aria-label="削除">×</button></span>`).join('')
+      : '<p class="empty">チェキなし</p>';
+  }
+  $('chekiChips').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { currentCheki.splice(+b.dataset.i, 1); renderCheki(); } });
+  function addCheki() {
+    const name = $('chekiPartnerInput').value.trim(), count = parseInt($('chekiCountInput').value, 10);
+    if (!name) { toast('チェキ相手の名前を入力してください', 'error'); return; }
+    if (!(count > 0)) { toast('枚数は1以上で入力してください', 'error'); return; }
+    const ex = currentCheki.find(c => norm(c.name) === norm(name));
+    if (ex) ex.count += count; else currentCheki.push({ name, count });
+    $('chekiPartnerInput').value = ''; $('chekiCountInput').value = '1';
+    renderCheki();
+  }
+  $('addChekiBtn').addEventListener('click', addCheki);
+
+  function addSong(song) {
+    song = String(song || '').trim();
+    if (!song) { toast('曲名を入力してください', 'error'); return; }
+    const list = splitSongs(F.setlist.value);
+    if (list.some(s => norm(s) === norm(song))) toast('その曲はすでにセットリストにあります', 'error');
+    else { F.setlist.value = list.concat(song).join('\n'); toast(`「${song}」を追加しました`); }
+    $('addSongInput').value = '';
+  }
+  $('addSongButton').addEventListener('click', () => addSong($('addSongInput').value));
+
+  // ================= 保存・編集 =================
+  $('liveEntryForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    if ($('memberInput').value.trim()) addMember($('memberInput').value);
+    const old = editingId ? liveData.find(x => x.id === editingId) : null;
+    const entry = {
+      id: editingId || genId(),
+      date: F.date.value, liveName: F.name.value.trim(), liveType: F.type.value.trim(),
+      venue: F.venue.value.trim(), group: F.group.value.trim(), members: [...currentMembers],
+      costume: F.costume.value.trim(), chekiDetails: clone(currentCheki),
+      setlist: splitSongs(F.setlist.value).join('\n'), memo: F.memo.value.trim(),
+      createdAt: old?.createdAt || Date.now(), updatedAt: Date.now(),
+    };
+    const missing = [['日付', entry.date], ['種類', entry.liveType], ['会場', entry.venue], ['グループ', entry.group], ['衣装', entry.costume], ['セットリスト', entry.setlist]]
+      .filter(([, v]) => !v).map(([k]) => k);
+    if (missing.length) { toast(`${missing.join('・')}を入力してください`, 'error'); return; }
+    const wasEdit = !!editingId;
+    resetForm();
+    Store.putLive(entry); toast(wasEdit ? '更新しました' : '保存しました');
+  });
+  $('cancelEditButton').addEventListener('click', () => { resetForm(); toast('編集をやめました'); });
+
+  function resetForm() {
+    $('liveEntryForm').reset();
+    currentCheki = []; currentMembers = [];
+    renderCheki(); renderMembers();
+    editingId = null;
+    $('submitButton').textContent = '保存する';
+    $('formTitle').textContent = 'ライブを記録';
+    $('cancelEditButton').hidden = true;
+    $('chekiCountInput').value = '1';
+  }
+  function editLive(id) {
+    const d = liveData.find(x => x.id === id);
+    if (!d) return;
+    F.date.value = d.date || ''; F.type.value = d.liveType || ''; F.name.value = d.liveName || '';
+    F.venue.value = d.venue || ''; F.group.value = d.group || ''; F.costume.value = d.costume || '';
+    F.setlist.value = d.setlist || ''; F.memo.value = d.memo || '';
+    currentCheki = clone(d.chekiDetails || []); currentMembers = [...(d.members || [])];
+    renderCheki(); renderMembers();
+    editingId = id;
+    $('submitButton').textContent = '更新する';
+    $('formTitle').textContent = `編集中: ${d.date} ${d.liveName || d.liveType}`;
+    $('cancelEditButton').hidden = false;
+    showTab('entry');
+    $('liveEntryForm').scrollIntoView({ behavior: 'smooth' });
+  }
+
+  // ================= 一覧 =================
+  function filtered() {
+    return liveData.filter(d => (fYear === 'all' || (d.date || '').slice(0, 4) === fYear) && (fGroup === 'all' || (d.group || '').trim() === fGroup));
+  }
+  function liveCard(d, deleted) {
+    const songs = splitSongs(d.setlist);
+    const cheki = (d.chekiDetails || []).map(c => `${esc(c.name)}×${c.count}`).join('、');
+    const btns = deleted
+      ? `<button class="btn sm" data-act="restore" data-id="${esc(d.id)}">復元</button><button class="btn sm danger" data-act="purge" data-id="${esc(d.id)}">完全に削除</button>`
+      : `<button class="btn sm" data-act="edit" data-id="${esc(d.id)}">編集</button><button class="btn sm" data-act="copy" data-id="${esc(d.id)}">コピー</button><button class="btn sm danger" data-act="delete" data-id="${esc(d.id)}">削除</button>`;
+    return `<article class="live">
+      <div class="meta">
+        <span class="date">${esc(d.date)}</span>
+        <span class="name">${esc(d.liveName || d.liveType)}</span>
+        <span class="sub"><span class="tag">${esc(d.liveType)}</span><b>${esc(d.group || '—')}</b> ／ ${esc(d.venue)} ／ 衣装: ${esc(d.costume)}</span>
+        ${d.members && d.members.length ? `<span class="sub">メンバー: ${esc(d.members.join('、'))}</span>` : ''}
+        ${cheki ? `<span class="sub">チェキ: ${cheki}</span>` : ''}
+        ${deleted ? '' : `<details><summary>セットリスト（${songs.length}曲）</summary><ol>${songs.map(s => `<li>${esc(s)}</li>`).join('')}</ol></details>`}
+        ${d.memo && !deleted ? `<div class="memo">${esc(d.memo)}</div>` : ''}
+      </div>
+      <div class="btns">${btns}</div>
+    </article>`;
+  }
+  function renderList() {
+    const list = filtered().sort((a, b) => (sortOrder === 'desc' ? -1 : 1) * ((a.date || '').localeCompare(b.date || '') || (a.createdAt || 0) - (b.createdAt || 0)));
+    $('liveDataList').innerHTML = list.length ? list.map(d => liveCard(d, false)).join('')
+      : `<div class="panel"><p class="empty">${liveData.length ? '条件に合うライブがありません。' : 'まだライブが記録されていません。「記録する」タブでセトリツイートを貼り付けるか、フォームから1件目を登録してください。'}</p></div>`;
+    $('deletedLiveDataList').innerHTML = deletedLiveData.length ? deletedLiveData.map(d => liveCard(d, true)).join('') : '<p class="empty">削除したライブはありません。</p>';
+    $('liveCount').textContent = list.length;
+    $('totalSongsCount').textContent = list.reduce((n, d) => n + splitSongs(d.setlist).length, 0);
+  }
+  document.addEventListener('click', async e => {
+    const b = e.target.closest('button[data-act]');
+    if (!b) return;
+    const id = b.dataset.id;
+    const d = liveData.find(x => x.id === id) || deletedLiveData.find(x => x.id === id);
+    if (!d) return;
+    try {
+      if (b.dataset.act === 'edit') editLive(id);
+      else if (b.dataset.act === 'copy') copyText(JSON.stringify(stripMeta(d), null, 2), 'このライブをコピーしました');
+      else if (b.dataset.act === 'delete') {
+        if (!await confirmBox('このライブを削除しますか？「最近削除したライブ」から復元できます。')) return;
+        if (editingId === id) resetForm();
+        Store.putLive({ ...d, deleted: true, deletedAt: Date.now() }); toast('削除しました');
+      } else if (b.dataset.act === 'restore') {
+        const { deleted, deletedAt, ...rest } = d;
+        Store.putLive(rest); toast('復元しました');
+      } else if (b.dataset.act === 'purge') {
+        if (!await confirmBox('このライブを完全に削除しますか？元に戻せません。')) return;
+        Store.purgeLive(id); toast('完全に削除しました');
+      }
+    } catch (err) { writeError(err); }
+  });
+  const stripMeta = d => { const { id, deleted, deletedAt, createdAt, updatedAt, ...rest } = d; return rest; };
+
+  // ================= フィルター =================
+  function populateFilters() {
+    const years = [...new Set(liveData.map(d => (d.date || '').slice(0, 4)).filter(Boolean))].sort().reverse();
+    if (fYear !== 'all' && !years.includes(fYear)) fYear = 'all';
+    const groups = sortJa(view.groups);
+    if (fGroup !== 'all' && !view.groups.has(fGroup)) fGroup = 'all';
+    const yOpts = '<option value="all">すべて</option>' + years.map(y => `<option value="${esc(y)}">${esc(y)}年</option>`).join('');
+    const gOpts = '<option value="all">すべて</option>' + groups.map(g => `<option value="${esc(g)}">${esc(g)}</option>`).join('');
+    ['yearFilter', 'yearFilter2'].forEach(id => { $(id).innerHTML = yOpts; $(id).value = fYear; });
+    ['groupFilter', 'groupFilter2'].forEach(id => { $(id).innerHTML = gOpts; $(id).value = fGroup; });
+  }
+  ['yearFilter', 'yearFilter2'].forEach(id => $(id).addEventListener('change', e => { fYear = e.target.value; renderAll(); }));
+  ['groupFilter', 'groupFilter2'].forEach(id => $(id).addEventListener('change', e => { fGroup = e.target.value; renderAll(); }));
+  $('sortOrder').addEventListener('change', e => { sortOrder = e.target.value; renderList(); });
+
+  // ================= ランキング =================
+  function renderRankings() {
+    const venue = {}, costume = {}, songs = {}, cheki = {}, member = {};
+    const inc = (o, k, n = 1) => { k = String(k || '').trim(); if (k) o[k] = (o[k] || 0) + n; };
+    filtered().forEach(d => {
+      inc(venue, d.venue); inc(costume, d.costume);
+      splitSongs(d.setlist).forEach(s => inc(songs, s));
+      (d.chekiDetails || []).forEach(c => inc(cheki, c.name, parseInt(c.count, 10) || 0));
+      (d.members || []).forEach(m => inc(member, m));
+    });
+    const zeroFill = (o, kind) => {
+      const m = view[kind];
+      (fGroup === 'all' ? [...m.values()] : (m.has(fGroup) ? [m.get(fGroup)] : [])).forEach(set => set.forEach(v => { if (!(v in o)) o[v] = 0; }));
+    };
+    zeroFill(songs, 'song'); zeroFill(cheki, 'cheki'); zeroFill(member, 'member');
+    const draw = (id, o, unit, what) => {
+      const data = Object.entries(o).sort(([a, x], [b, y]) => y - x || a.localeCompare(b, 'ja'));
+      if (!data.length) { $(id).innerHTML = `<p class="empty">${what}のデータがまだありません。</p>`; return; }
+      let rank = 0, prev = null;
+      $(id).innerHTML = data.map(([item, n], i) => {
+        if (n !== prev) { rank = i + 1; prev = n; }
+        return `<li><span class="no${rank <= 3 && n > 0 ? ' top' : ''}">${rank}</span><span class="item">${esc(item)}</span><span class="n">${n}${unit}</span></li>`;
+      }).join('');
+    };
+    draw('setlistRanking', songs, '回', '楽曲');
+    draw('venueRanking', venue, '回', '会場');
+    draw('costumeRanking', costume, '回', '衣装');
+    draw('memberRanking', member, '回', 'メンバー');
+    draw('chekiRanking', cheki, '枚', 'チェキ');
+  }
+
+  // ================= 候補の管理 =================
+  const GLOBAL = { groups: 'グループ', venues: '会場', liveTypes: 'ライブの種類' };
+  const SCOPED = { member: 'メンバー', song: '楽曲', costume: '衣装', cheki: 'チェキ相手' };
+  $('globalManage').innerHTML = Object.entries(GLOBAL).map(([k, label]) => `
+    <div class="panel"><h3>${label}</h3>
+      <div class="row"><div class="grow"><input id="g-in-${k}" class="field" placeholder="新しい${label}"></div><button type="button" class="btn" data-gadd="${k}">追加</button></div>
+      <ul id="g-list-${k}" class="cand"></ul></div>`).join('');
+  $('scopedManage').innerHTML = Object.entries(SCOPED).map(([k, label]) => `
+    <div class="panel"><h3>${label}（グループごと）</h3>
+      <select id="s-sel-${k}" class="field" aria-label="グループ"><option value="">グループを選択…</option></select>
+      <div class="row"><div class="grow"><input id="s-in-${k}" class="field" placeholder="${k === 'member' ? '名前（「、」区切りで複数可）' : '新しい' + label}" disabled></div><button type="button" class="btn" data-sadd="${k}" disabled>追加</button></div>
+      <ul id="s-list-${k}" class="cand"></ul></div>`).join('');
+  const candRow = (attrs, v) => `<li><span>${esc(v)}</span><button type="button" class="btn sm danger" ${attrs} data-item="${esc(v)}">削除</button></li>`;
+
+  function renderManage() {
+    Object.keys(GLOBAL).forEach(k => {
+      const set = view[k];
+      $('g-list-' + k).innerHTML = set.size ? sortJa(set).map(v => candRow(`data-gdel="${k}"`, v)).join('') : '<p class="empty">まだありません</p>';
+    });
+    const groups = sortJa(view.groups);
+    Object.keys(SCOPED).forEach(k => {
+      const sel = $('s-sel-' + k), keep = sel.value;
+      sel.innerHTML = '<option value="">グループを選択…</option>' + groups.map(g => `<option value="${esc(g)}">${esc(g)}</option>`).join('');
+      sel.value = view.groups.has(keep) ? keep : '';
+      const g = sel.value;
+      $('s-in-' + k).disabled = !g;
+      document.querySelector(`[data-sadd="${k}"]`).disabled = !g;
+      const set = g ? (view[k].get(g) || new Set()) : null;
+      $('s-list-' + k).innerHTML = !g ? '<p class="empty">グループを選ぶと一覧が出ます</p>'
+        : set.size ? (k === 'song' ? [...set] : sortJa(set)).map(v => candRow(`data-sdel="${k}" data-group="${esc(g)}"`, v)).join('')
+          : '<p class="empty">まだありません</p>';
+    });
+  }
+  Object.keys(SCOPED).forEach(k => {
+    $('s-sel-' + k).addEventListener('change', renderManage);
+    $('s-in-' + k).addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) document.querySelector(`[data-sadd="${k}"]`).click(); });
+  });
+  Object.keys(GLOBAL).forEach(k => $('g-in-' + k).addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) document.querySelector(`[data-gadd="${k}"]`).click(); }));
+
+  $('tab-manage').addEventListener('click', async e => {
+    const t = e.target.closest('button');
+    if (!t) return;
+    if (t.dataset.gadd) {
+      const k = t.dataset.gadd, inp = $('g-in-' + k), v = inp.value.trim();
+      if (!v) return toast('入力してください', 'error');
+      if (view[k].has(v)) return toast('すでに登録されています');
+      cand[k].add(v); inp.value = ''; Store.saveCandidates(); toast(`「${v}」を追加しました`);
+    } else if (t.dataset.sadd) {
+      const k = t.dataset.sadd, g = $('s-sel-' + k).value, inp = $('s-in-' + k);
+      const values = (k === 'member' ? inp.value.split(/[、,，]/) : [inp.value]).map(s => s.trim()).filter(Boolean);
+      const added = values.filter(v => !(view[k].get(g)?.has(v)) && addTo(cand, k, g, v));
+      if (!added.length) return toast(values.length ? 'すでに登録されています' : '入力してください', values.length ? undefined : 'error');
+      inp.value = ''; Store.saveCandidates(); toast(`「${added.join('、')}」を追加しました`);
+    } else if (t.dataset.gdel || t.dataset.sdel) {
+      const item = t.dataset.item;
+      const isGroup = t.dataset.gdel === 'groups';
+      if (!await confirmBox(`「${item}」を候補から削除しますか？${isGroup ? '（このグループのメンバー・楽曲・衣装・チェキ相手の候補も消えます）' : ''}`)) return;
+      if (t.dataset.gdel) { cand[t.dataset.gdel].delete(item); if (isGroup) KINDS.forEach(k => cand[k].delete(item)); }
+      else cand[t.dataset.sdel].get(t.dataset.group)?.delete(item);
+      await Store.saveCandidates();
+      const still = t.dataset.gdel ? view[t.dataset.gdel].has(item) : view[t.dataset.sdel].get(t.dataset.group)?.has(item);
+      toast(still ? `「${item}」は登録済みのライブで使われているため、候補に残ります` : `「${item}」を削除しました`);
+    }
+  });
+
+  // ================= コピー・取り込み・全削除 =================
+  function copyText(text, okMsg) {
+    navigator.clipboard.writeText(text).then(() => toast(okMsg)).catch(() => {
+      $('pasteDataTextarea').value = text; $('pasteModal').hidden = false;
+      $('pasteModalMessage').hidden = false; $('pasteModalMessage').textContent = 'コピーできなかったため、ここに表示しています。全選択してコピーしてください。';
+      $('pasteDataTextarea').select();
+    });
+  }
+  $('copyAllDataButton').addEventListener('click', () => copyText(JSON.stringify(filtered().map(stripMeta), null, 2), '表示中のライブをコピーしました'));
+  $('pasteDataButton').addEventListener('click', () => { $('pasteDataTextarea').value = ''; $('pasteModalMessage').hidden = true; $('pasteModal').hidden = false; });
+  $('cancelPasteButton').addEventListener('click', () => { $('pasteModal').hidden = true; });
+  $('importDataButton').addEventListener('click', async () => {
+    const msg = $('pasteModalMessage');
+    const say = t => { msg.hidden = false; msg.textContent = t; };
+    let arr;
+    try { const p = JSON.parse($('pasteDataTextarea').value.trim()); arr = Array.isArray(p) ? p : [p]; }
+    catch (e) { return say('JSONとして読み取れませんでした。コピーした内容をそのまま貼り付けてください。'); }
+    const valid = arr.filter(d => d && d.date && d.liveType && d.venue && d.costume && typeof d.group === 'string' && d.setlist);
+    if (!valid.length) return say('取り込めるライブデータが見つかりませんでした。');
+    const btn = $('importDataButton'); btn.disabled = true;
+    let n = 0;
+    try {
+      for (const d of valid) {
+        const entry = { ...stripMeta(d), members: Array.isArray(d.members) ? d.members : [], chekiDetails: d.chekiDetails || [], id: genId(), createdAt: Date.now() + n, updatedAt: Date.now() };
+        Store.putLive(entry); n++;
+        
+      }
+      $('pasteModal').hidden = true;
+      toast(`${n}件のライブを取り込みました`);
+    } catch (err) { writeError(err); }
+    finally { btn.disabled = false; }
+  });
+  $('restoreAllDeletedData').addEventListener('click', async () => {
+    if (!deletedLiveData.length || !await confirmBox('削除したライブをすべて復元しますか？')) return;
+    try { for (const d of [...deletedLiveData]) { const { deleted, deletedAt, ...rest } = d; Store.putLive(rest); } toast('すべて復元しました'); } catch (err) { writeError(err); }
+  });
+  $('clearDeletedData').addEventListener('click', async () => {
+    if (!deletedLiveData.length || !await confirmBox('削除したライブをすべて完全に削除しますか？元に戻せません。')) return;
+    try { for (const d of [...deletedLiveData]) Store.purgeLive(d.id); toast('完全に削除しました'); } catch (err) { writeError(err); }
+  });
+  $('clearAllData').addEventListener('click', async () => {
+    if (!await confirmBox('すべてのライブ（削除済みを含む）と候補を削除しますか？元に戻せません。')) return;
+    try {
+      for (const d of [...liveData, ...deletedLiveData]) Store.purgeLive(d.id);
+      cand = emptyCandidates(); await Store.saveCandidates();
+      resetForm(); toast('すべてのデータを削除しました');
+    } catch (err) { writeError(err); }
+  });
+
+  // ================= Xのセトリ解析 =================
+  const TYPE_KEYWORDS = [
+    [/ワンマン/, 'ワンマンライブ'], [/定期公演|定期ライブ|定期/, '定期公演'], [/生誕/, '生誕祭'], [/周年/, '周年ライブ'],
+    [/リリイベ|リリースイベント|インストア/, 'リリースイベント'], [/フェス/, 'フェス'], [/主催/, '主催ライブ'],
+    [/対バン|ツーマン|2マン|スリーマン|3マン/, '対バン'], [/配信/, '配信ライブ'],
+  ];
+  const SONG_PATTERNS = [
+    /^(?:M|Ｍ|m|ｍ)\s*[.．]?\s*\d{1,2}\s*[.．:：)）\]】\-－_]?\s*(.+)$/,
+    /^(?:EN|ＥＮ|En|en)\s*\d{0,2}\s*[.．:：)）\]】\-－\s]\s*(.+)$/,
+    /^(?:EN|ＥＮ|En|en)\s*\d{1,2}\s*(.+)$/,
+    /^(?:アンコール|encore|Encore|ENCORE)\s*\d{0,2}\s*[.．:：)）\-－\s]\s*(.+)$/,
+    /^[0-9０-９]{1,2}\s*[.．:：)）、]\s*(.+)$/,
+    /^[①-⑳㉑-㉟❶-❿➀-➉⓵-⓾]\s*(.+)$/,
+    /^[\-－・･●○◆◇■□▶▷►♪♫♬※*＊]\s*(.+)$/,
+    /^(?:🎵|🎶|🎤|💿)\s*(.+)$/,
+  ];
+  const NOT_SONG = /^(?:MC|ＭＣ|SE|ＳＥ|トーク|自己紹介|アンコール|encore|EN|ＥＮ|特典会.*|物販.*)$/i;
+  const HEADER_RE = /(セトリ|セットリスト|set\s*list)/i;
+  const WEEKDAY_RE = /[(（][月火水木金土日祝・]+[)）]/g;
+  const LABELS = {
+    venue: /^(?:📍|🏠|会場|場所|ハコ)\s*[:：]?\s*(.+)$/,
+    costume: /^(?:👗|衣装)\s*[:：]?\s*(.+)$/,
+    members: /^(?:出演メンバー|参加メンバー|メンバー)\s*[:：]\s*(.+)$/,
+    absent: /^(?:休演|欠席|お休み|不参加)(?:メンバー)?\s*[:：]\s*(.+)$/,
+    liveName: /^(?:ライブ名|イベント名?|公演名?|タイトル)\s*[:：]\s*(.+)$/,
+    liveType: /^(?:種類|形式|ライブの種類)\s*[:：]\s*(.+)$/,
+    group: /^(?:グループ名?|出演グループ|出演)\s*[:：]\s*(.+)$/,
+  };
+  const stripBrackets = s => String(s || '').replace(/^[\s【\[［『「〈《(（"“]+|[\s】\]］』」〉》)）"”]+$/g, '').trim();
+  const canonical = (v, list) => { const n = norm(v); return list.find(x => norm(x) === n) || null; };
+  function longestContained(text, list) {
+    const n = norm(text);
+    let best = null;
+    list.forEach(v => { const nv = norm(v); if (nv.length >= 2 && n.includes(nv) && (!best || nv.length > norm(best).length)) best = v; });
+    return best;
+  }
+  function inferYear(m, d) {
+    const now = new Date();
+    let y = now.getFullYear();
+    if (new Date(y, m - 1, d) - now > 60 * 86400000) y -= 1; // 2か月以上先なら去年
+    return y;
+  }
+  function findDate(line) {
+    let m = line.match(/(20\d{2})\s*[\/.\-年]\s*(\d{1,2})\s*[\/.\-月]\s*(\d{1,2})\s*日?/);
+    if (m) return { y: +m[1], m: +m[2], d: +m[3], raw: m[0] };
+    m = line.match(/(?:^|[^\d])(20\d{2})(\d{2})(\d{2})(?!\d)/);
+    if (m) return { y: +m[1], m: +m[2], d: +m[3], raw: m[0] };
+    m = line.match(/(?:^|[^\d])(\d{1,2})\s*月\s*(\d{1,2})\s*日/) || line.match(/(?:^|[^\d.])(\d{1,2})\s*\/\s*(\d{1,2})(?![\d\/])/);
+    if (m) return { y: null, m: +m[1], d: +m[2], raw: m[0] };
+    m = line.match(/(?:^|[^\d.])(\d{1,2})\s*\.\s*(\d{1,2})(?![\d.])/);
+    if (m && (/[(（][月火水木金土日祝]/.test(line) || /[@＠]/.test(line) || !line.replace(m[0], '').trim()))
+      return { y: null, m: +m[1], d: +m[2], raw: m[0] };
+    return null;
+  }
+  const looksLikeHandle = s => /^[A-Za-z0-9_]{1,15}$/.test(s) && /[_0-9]/.test(s);
+
+  function parseSetlistText(text) {
+    const r = { date: '', dateSource: '', venue: '', group: '', liveName: '', liveType: '', costume: '', members: [], songs: [], newSongs: [], hashtags: [], absent: '' };
+    const cleaned = String(text || '').replace(/https?:\/\/\S+/g, '').replace(/pic\.twitter\.com\/\S+/g, '').replace(/\r/g, '');
+    r.hashtags = [...cleaned.matchAll(/[#＃]([^\s#＃]+)/g)].map(m => m[1]);
+    const lines = cleaned.split('\n').map(l => l.replace(/[​﻿]/g, '').trim()).filter(Boolean);
+    const used = new Set();
+    let dateRest = '', nameFromVenueLine = '';
+
+    // 1) ラベル付きの行（会場: 〇〇 など）
+    const label = {};
+    lines.forEach((l, i) => {
+      for (const [k, re] of Object.entries(LABELS)) {
+        const m = l.match(re);
+        if (m && !label[k]) { label[k] = m[1].replace(/[#＃]\S+/g, '').trim(); used.add(i); break; }
+      }
+    });
+
+    // 2) 日付
+    for (let i = 0; i < lines.length; i++) {
+      if (used.has(i)) continue;
+      const d = findDate(lines[i]);
+      if (!d || d.m < 1 || d.m > 12 || d.d < 1 || d.d > 31) continue;
+      r.date = `${d.y || inferYear(d.m, d.d)}-${pad(d.m)}-${pad(d.d)}`;
+      r.dateSource = d.y ? '' : '年は推定';
+      dateRest = stripBrackets(lines[i].replace(d.raw, '').replace(WEEKDAY_RE, '').replace(HEADER_RE, ''));
+      used.add(i);
+      break;
+    }
+
+    // 3) グループ
+    const groups = [...view.groups];
+    if (label.group) r.group = canonical(label.group, groups) || longestContained(label.group, groups) || label.group;
+    if (!r.group) r.group = longestContained(cleaned, groups) || '';
+    if (!r.group) for (const h of r.hashtags) { const c = canonical(h, groups); if (c) { r.group = c; break; } }
+    lines.forEach((l, i) => {
+      if (/^([#＃]\S+\s*)+$/.test(l)) used.add(i);
+      if (r.group && norm(stripBrackets(l)) === norm(r.group)) used.add(i);
+    });
+
+    // 4) 会場
+    const venues = [...view.venues];
+    let venueRaw = label.venue || '';
+    if (!venueRaw) {
+      for (let i = 0; i < lines.length; i++) {
+        const m = lines[i].match(/[@＠]\s*([^\n]+)/);
+        if (!m) continue;
+        const v = m[1].replace(/[#＃]\S+/g, '').replace(/(にて|で)?[!！]*$/, '').trim();
+        const words = v.split(/\s+/);
+        if (!v || (words.length === 1 && looksLikeHandle(words[0]))) continue;
+        venueRaw = v;
+        const before = stripBrackets(lines[i].slice(0, m.index).replace(findDate(lines[i])?.raw || '', '').replace(WEEKDAY_RE, '').replace(HEADER_RE, '').replace(/[【】\[\]『』]/g, ' '));
+        if (before) nameFromVenueLine = before;
+        if (dateRest) dateRest = stripBrackets(dateRest.replace(m[0], '').replace(v, ''));
+        used.add(i);
+        break;
+      }
+    }
+    r.venue = venueRaw ? (canonical(venueRaw, venues) || longestContained(venueRaw, venues) || stripBrackets(venueRaw)) : (longestContained(cleaned, venues) || '');
+
+    // 5) 見出し行（【セトリ】など）
+    let headerName = '';
+    lines.forEach((l, i) => {
+      if (!HEADER_RE.test(l) || l.length > 40) return;
+      used.add(i);
+      const rest = stripBrackets(l.replace(findDate(l)?.raw || '', '').replace(HEADER_RE, '').replace(WEEKDAY_RE, '').replace(/[【】\[\]『』「」]/g, ' ').replace(/[@＠].*$/, ''))
+        .replace(/^(本日の|今日の)\s*/, '').trim();
+      if (rest && !headerName && norm(rest) !== norm(r.group)) headerName = rest;
+    });
+
+    // 6) 曲
+    const knownSongs = r.group && view.song.has(r.group) ? [...view.song.get(r.group)] : gItems('song', '');
+    const songLines = [];
+    lines.forEach((l, i) => {
+      if (used.has(i)) return;
+      for (const re of SONG_PATTERNS) {
+        const m = l.match(re);
+        if (!m) continue;
+        const s = stripBrackets(m[1].replace(/[#＃]\S+/g, '').trim());
+        if (s && !NOT_SONG.test(s)) songLines.push({ i, s });
+        used.add(i);
+        return;
+      }
+    });
+    if (songLines.length) r.songs = songLines.map(o => canonical(o.s, knownSongs) || o.s);
+    else {
+      // 番号が付いていない場合: 既存曲と一致する行、または「/」「→」区切りの行
+      lines.forEach((l, i) => {
+        if (used.has(i)) return;
+        const parts = l.split(/\s*(?:\/|／|→|⇒|＞)\s*/).map(stripBrackets).filter(Boolean);
+        if (parts.length >= 3) { parts.forEach(p => r.songs.push(canonical(p, knownSongs) || p)); used.add(i); return; }
+        const c = canonical(stripBrackets(l), knownSongs);
+        if (c) { r.songs.push(c); used.add(i); }
+      });
+    }
+    r.songs = r.songs.filter(s => !NOT_SONG.test(s));
+    r.newSongs = r.songs.filter(s => !knownSongs.some(k => norm(k) === norm(s)));
+
+    // 7) ライブ名・種類
+    const firstSong = songLines.length ? songLines[0].i : lines.length;
+    let liveName = label.liveName || headerName || nameFromVenueLine || '';
+    if (!liveName) {
+      for (let i = 0; i < firstSong; i++) {
+        if (used.has(i)) continue;
+        if (/^[【『\[［].+[】』\]］]$/.test(lines[i]) || TYPE_KEYWORDS.some(([re]) => re.test(lines[i]))) { liveName = stripBrackets(lines[i]); used.add(i); break; }
+      }
+    }
+    if (!liveName && dateRest) {
+      if (!r.venue) r.venue = canonical(dateRest, venues) || dateRest;
+      else if (norm(dateRest) !== norm(r.venue)) liveName = dateRest;
+    }
+    r.liveName = liveName.replace(/[#＃]\S+/g, '').trim();
+    const types = [...view.liveTypes];
+    if (label.liveType) r.liveType = canonical(label.liveType, types) || label.liveType;
+    if (!r.liveType) {
+      const scope = [r.liveName, ...lines.filter((_, i) => !songLines.some(s => s.i === i))].join('\n');
+      for (const [re, t] of TYPE_KEYWORDS) if (re.test(scope)) { r.liveType = canonical(t, types) || t; break; }
+    }
+    if (!r.liveType) r.liveType = longestContained(r.liveName, types) || '';
+
+    // 8) メンバー
+    const known = r.group && view.member.has(r.group) ? [...view.member.get(r.group)] : [];
+    const splitNames = s => s.split(/[、,，/／・\s]+/).map(x => x.trim()).filter(Boolean);
+    if (label.members) r.members = /全員/.test(label.members) ? [...known] : splitNames(label.members).map(s => canonical(s, known) || s);
+    if (label.absent && known.length) {
+      const absent = splitNames(label.absent).map(norm);
+      r.members = (r.members.length ? r.members : known).filter(m => !absent.includes(norm(m)));
+      r.absent = label.absent;
+    }
+
+    // 9) 衣装
+    const costumes = r.group ? gItems('costume', r.group) : [];
+    if (label.costume) r.costume = canonical(label.costume, costumes) || label.costume;
+    else r.costume = longestContained(lines.filter((_, i) => !songLines.some(s => s.i === i)).join('\n'), costumes) || '';
+    return r;
+  }
+
+  function applyParsed(r) {
+    const set = (el, v) => { if (v) el.value = v; };
+    set(F.date, r.date); set(F.venue, r.venue); set(F.group, r.group); set(F.name, r.liveName);
+    set(F.type, r.liveType); set(F.costume, r.costume);
+    if (r.members.length) { currentMembers = [...new Set(r.members)]; renderMembers(); }
+    if (r.songs.length) F.setlist.value = r.songs.join('\n');
+    const url = $('tweetUrl').value.trim();
+    if (url && !F.memo.value.includes(url)) F.memo.value = (F.memo.value ? F.memo.value + '\n' : '') + '元ツイート: ' + url;
+  }
+  function renderParseResult(r) {
+    const row = (label, v, note) => `<dt>${label}</dt><dd>${v ? esc(v) + (note ? `<span class="note">${esc(note)}</span>` : '') : '<span class="miss">読み取れませんでした</span>'}</dd>`;
+    const box = $('parseResult');
+    box.innerHTML = `<h3>読み取った内容をフォームに入れました。確認して「保存する」を押してください。</h3>
+      <dl>
+        ${row('日付', r.date, r.dateSource)}
+        ${row('ライブ名', r.liveName)}
+        ${row('種類', r.liveType)}
+        ${row('会場', r.venue, r.venue && !view.venues.has(r.venue) ? '新しい会場' : '')}
+        ${row('グループ', r.group, r.group && !view.groups.has(r.group) ? '新しいグループ' : '')}
+        ${row('メンバー', r.members.join('、'), r.absent ? '休演: ' + r.absent : '')}
+        ${row('衣装', r.costume)}
+        ${row('セトリ', r.songs.length ? r.songs.length + '曲' : '', r.newSongs.length ? '未登録の曲: ' + r.newSongs.join(' / ') : '')}
+      </dl>
+      ${!r.group && r.hashtags.length ? `<p class="hint">ハッシュタグ: ${r.hashtags.map(h => '#' + esc(h)).join(' ')}。グループを「候補の管理」に登録しておくと次から自動で判別します。</p>` : ''}
+      ${!r.songs.length ? '<p class="hint">曲が見つかりませんでした。セトリが画像のツイートは読み取れないので、フォームに入力してください。</p>' : ''}`;
+    box.hidden = false;
+  }
+  $('parseTweetBtn').addEventListener('click', () => {
+    const text = $('tweetText').value.trim();
+    if (!text) return toast('ツイート本文を貼り付けてください', 'error');
+    const r = parseSetlistText(text);
+    applyParsed(r); renderParseResult(r);
+    toast('フォームに反映しました');
+  });
+  $('clearTweetBtn').addEventListener('click', () => { $('tweetText').value = ''; $('tweetUrl').value = ''; $('parseResult').hidden = true; });
+
+  // ================= 描画まとめ =================
+  function renderAll() {
+    rebuildView();
+    populateFilters();
+    renderList();
+    renderRankings();
+    renderManage();
+  }
+
+  // 初期表示
+  renderMembers(); renderCheki();
+  try { const t = localStorage.getItem('setori-tab'); if (t && $('tab-' + t)) showTab(t); } catch (e) { }
+  renderAll();
+  Store.init();
+  window.__parseSetlistText = parseSetlistText; // 動作確認用
+})();
+</script>
+</body>
+</html>
