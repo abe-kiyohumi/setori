@@ -224,8 +224,22 @@ h4 { margin: 0; font-size: 0.88rem; color: var(--muted); letter-spacing: 0.03em;
 <main class="wrap">
   <section id="loginGate" class="panel">
     <h2>ログインしてください</h2>
-    <p class="hint">Googleアカウントでログインすると、PC・スマホのどれからでも同じライブデータを見たり記録したりできます。データはあなたのアカウントだけが読み書きできます。</p>
+    <p class="hint">ログインすると、PC・スマホのどれからでも同じライブデータを見たり記録したりできます。データはそのアカウントだけが読み書きできます。</p>
     <button type="button" id="loginBtn" class="btn primary">Googleでログイン</button>
+    <div class="panel inset">
+      <h3>メールアドレスとパスワードでログイン</h3>
+      <form id="emailForm" style="display:flex;flex-direction:column;gap:10px" autocomplete="on">
+        <div><label class="lbl" for="loginEmail">メールアドレス</label><input id="loginEmail" class="field" type="email" autocomplete="username" placeholder="example@mail.com"></div>
+        <div><label class="lbl" for="loginPass">パスワード（6文字以上）</label><input id="loginPass" class="field" type="password" autocomplete="current-password"></div>
+        <div class="actions">
+          <button type="submit" id="emailLoginBtn" class="btn primary">ログイン</button>
+          <button type="button" id="emailSignupBtn" class="btn">新しく登録</button>
+        </div>
+        <button type="button" id="resetPassBtn" class="btn sm" style="align-self:flex-start">パスワードを忘れた</button>
+        <p id="emailMsg" class="hint" hidden></p>
+      </form>
+      <p class="hint">Googleでログインした場合とメールアドレスでログインした場合は、別のアカウントになります（データは共有されません）。いつも同じ方法でログインしてください。</p>
+    </div>
   </section>
   <!-- ========== 記録する ========== -->
   <section class="tab" id="tab-entry">
@@ -473,7 +487,7 @@ h4 { margin: 0; font-size: 0.88rem; color: var(--muted); letter-spacing: 0.03em;
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
-import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, onAuthStateChanged, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, doc, setDoc, getDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 
 // ▼ Firebase の設定（Firebaseコンソール → プロジェクトの設定 → マイアプリ でコピーしたもの）
@@ -742,6 +756,48 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     else login();
   });
   $('loginBtn').addEventListener('click', login);
+
+  // ----- メールアドレス＋パスワード -----
+  const AUTH_MSG = {
+    'auth/invalid-email': 'メールアドレスの形式が正しくありません。',
+    'auth/missing-email': 'メールアドレスを入力してください。',
+    'auth/missing-password': 'パスワードを入力してください。',
+    'auth/invalid-credential': 'メールアドレスかパスワードが違います。初めての場合は「新しく登録」を押してください。',
+    'auth/wrong-password': 'パスワードが違います。',
+    'auth/user-not-found': 'このメールアドレスは登録されていません。「新しく登録」を押してください。',
+    'auth/email-already-in-use': 'このメールアドレスはすでに登録されています。「ログイン」を押してください。',
+    'auth/weak-password': 'パスワードは6文字以上にしてください。',
+    'auth/too-many-requests': '何度も失敗したため、しばらくログインできません。時間をおいてお試しください。',
+    'auth/operation-not-allowed': 'Firebaseでメール/パスワードのログインが有効になっていません。',
+    'auth/network-request-failed': '通信できませんでした。電波の良い所でお試しください。',
+  };
+  function emailMsg(text, isError) {
+    const m = $('emailMsg'); m.hidden = !text; m.textContent = text || '';
+    m.style.color = isError ? 'var(--danger)' : '';
+  }
+  async function emailAuth(signup) {
+    const email = $('loginEmail').value.trim(), pass = $('loginPass').value;
+    if (!email) return emailMsg(AUTH_MSG['auth/missing-email'], true);
+    if (!pass) return emailMsg(AUTH_MSG['auth/missing-password'], true);
+    if (signup && pass.length < 6) return emailMsg(AUTH_MSG['auth/weak-password'], true);
+    ['emailLoginBtn', 'emailSignupBtn'].forEach(id => { $(id).disabled = true; });
+    emailMsg(signup ? '登録しています…' : 'ログインしています…');
+    try {
+      if (signup) await createUserWithEmailAndPassword(auth, email, pass);
+      else await signInWithEmailAndPassword(auth, email, pass);
+      emailMsg(''); $('loginPass').value = '';
+    } catch (e) {
+      emailMsg(AUTH_MSG[e.code] || `ログインできませんでした（${e.code || e.message}）`, true);
+    } finally { ['emailLoginBtn', 'emailSignupBtn'].forEach(id => { $(id).disabled = false; }); }
+  }
+  $('emailForm').addEventListener('submit', e => { e.preventDefault(); emailAuth(false); });
+  $('emailSignupBtn').addEventListener('click', () => emailAuth(true));
+  $('resetPassBtn').addEventListener('click', async () => {
+    const email = $('loginEmail').value.trim();
+    if (!email) return emailMsg('メールアドレスを入力してから押してください。', true);
+    try { await sendPasswordResetEmail(auth, email); emailMsg(`${email} にパスワード再設定のメールを送りました（登録されている場合）。届かないときは迷惑メールも確認してください。`); }
+    catch (e) { emailMsg(AUTH_MSG[e.code] || `送れませんでした（${e.code || e.message}）`, true); }
+  });
 
   // ================= トースト・確認 =================
   let toastTimer;
