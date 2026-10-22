@@ -175,6 +175,11 @@ h4 { margin: 0; font-size: 0.88rem; color: var(--muted); letter-spacing: 0.03em;
 #lightbox { background: rgba(10, 5, 14, 0.88); cursor: zoom-out; flex-direction: column; gap: 10px; }
 #lightbox img { max-width: 100%; max-height: 85vh; border-radius: 8px; }
 #lightbox p { color: #fff; margin: 0; font-size: 0.9rem; }
+/* ツイートからの候補 */
+.hintchips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; align-items: center; }
+.hintchips .lead { font-size: 0.78rem; color: var(--muted); }
+.hintchips button { border: 1px dashed var(--accent); background: var(--accent-soft); color: var(--ink); border-radius: 999px; padding: 2px 10px; font: inherit; font-size: 0.82rem; cursor: pointer; max-width: 100%; overflow-wrap: anywhere; text-align: left; }
+.hintchips button:hover { border-style: solid; }
 /* 候補 */
 .cand { list-style: none; margin: 0; padding: 0; max-height: 220px; overflow-y: auto; }
 .cand li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--line); font-size: 0.92rem; }
@@ -226,14 +231,20 @@ h4 { margin: 0; font-size: 0.88rem; color: var(--muted); letter-spacing: 0.03em;
   <section class="tab" id="tab-entry">
     <div class="panel inset">
       <h2>Xのセトリツイートから読み込む</h2>
-      <p class="hint">ツイート本文をそのまま貼り付けて「解析して反映」を押すと、日付・会場・グループ・ライブ名と種類・メンバー・衣装・セットリストを下のフォームに入れます。</p>
-      <textarea id="tweetText" class="field" rows="7" placeholder="【セトリ】10/18(土) 定期公演 vol.12&#10;@渋谷CYCLONE&#10;M1 曲A&#10;M2 曲B&#10;EN 曲C&#10;#なみだ色の消しごむ"></textarea>
+      <p class="hint">ツイートのURLを貼ると、本文を読み込んで日付・会場・グループ・ライブ名と種類・体制・衣装・セットリストを下のフォームに入れます。うまく読み込めないときは、本文をコピーして下の欄に貼ってください。</p>
       <div>
-        <label class="lbl" for="tweetUrl">元ツイートのURL（任意・メモに残します）</label>
-        <input id="tweetUrl" class="field" type="url" placeholder="https://x.com/…/status/…">
+        <label class="lbl" for="tweetUrl">ツイートのURL</label>
+        <div class="row">
+          <div class="grow"><input id="tweetUrl" class="field" type="url" placeholder="https://x.com/…/status/…"></div>
+          <button type="button" id="fetchTweetBtn" class="btn primary">URLから読み込む</button>
+        </div>
       </div>
+      <details id="tweetTextBox">
+        <summary class="hint" style="cursor:pointer">ツイート本文（貼り付け・確認用）</summary>
+        <textarea id="tweetText" class="field" rows="7" style="margin-top:8px" placeholder="【セトリ】10/18(土) 定期公演 vol.12&#10;@渋谷CYCLONE&#10;M1 曲A&#10;M2 曲B&#10;EN 曲C&#10;#なみだ色の消しごむ"></textarea>
+      </details>
       <div class="actions">
-        <button type="button" id="parseTweetBtn" class="btn primary">解析して反映</button>
+        <button type="button" id="parseTweetBtn" class="btn">本文を解析して反映</button>
         <button type="button" id="clearTweetBtn" class="btn">クリア</button>
       </div>
       <div id="parseResult" class="result panel" hidden></div>
@@ -245,9 +256,9 @@ h4 { margin: 0; font-size: 0.88rem; color: var(--muted); letter-spacing: 0.03em;
         <div><label class="lbl req" for="liveDate">日付</label><input type="date" id="liveDate" class="field"></div>
         <div><label class="lbl" for="liveType">ライブの種類</label><input id="liveType" class="field" placeholder="定期公演 / 対バン など"></div>
       </div>
-      <div><label class="lbl" for="liveName">ライブ名</label><input id="liveName" class="field" placeholder="例: 定期公演 vol.12"></div>
+      <div><label class="lbl" for="liveName">ライブ名</label><input id="liveName" class="field" placeholder="例: 定期公演 vol.12"><div id="nameHints" class="hintchips" hidden></div></div>
       <div class="grid2">
-        <div><label class="lbl" for="liveVenue">会場</label><input id="liveVenue" class="field" placeholder="一部を入力すると候補が出ます"></div>
+        <div><label class="lbl" for="liveVenue">会場</label><input id="liveVenue" class="field" placeholder="一部を入力すると候補が出ます"><div id="venueHints" class="hintchips" hidden></div></div>
         <div><label class="lbl req" for="liveGroup">グループ</label><input id="liveGroup" class="field" placeholder="一部を入力すると候補が出ます"></div>
       </div>
 
@@ -384,6 +395,12 @@ h4 { margin: 0; font-size: 0.88rem; color: var(--muted); letter-spacing: 0.03em;
           <div class="row"><div class="grow"><input id="lmMemberIn" class="field" placeholder="名前（「、」区切りで複数可）"></div><button type="button" id="lmMemberAdd" class="btn">追加</button></div>
         </div>
         <div class="panel inset">
+          <h3>Xアカウント</h3>
+          <p class="hint">このアカウントのツイートを読み込むと、このグループとして判別します。ツイートを読み込んで保存すると自動で覚えます。</p>
+          <div id="lmAccounts" class="chips"></div>
+          <div class="row"><div class="grow"><input id="lmAccountIn" class="field" placeholder="@アカウント名"></div><button type="button" id="lmAccountAdd" class="btn">追加</button></div>
+        </div>
+        <div class="panel inset">
           <h3>体制</h3>
           <div id="lmLineups" style="display:flex;flex-direction:column;gap:10px"></div>
         </div>
@@ -495,6 +512,9 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   let cand = emptyCandidates();      // 保存されている候補
   let view = emptyCandidates();      // 保存候補 ＋ ライブデータから集めた候補（表示用）
   let currentCheki = [], currentMembers = [], currentChekiTweets = [];
+  let tweetPostDate = ''; // URLから読み込んだツイートの投稿日
+  let tweetAccount = '';  // URLから読み込んだツイートのアカウント（小文字・@なし）
+  let lineupWhy = '';     // 体制を自動で選んだ理由
   let costumeImgs = [];   // { id, group, costume, thumb, createdAt }
   let currentLineup = '', lineupManual = false;
   let editingId = null, fYear = 'all', fGroup = 'all', fLineup = 'all', sortOrder = 'desc';
@@ -503,12 +523,13 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   let liveLineup = new Map();       // ライブID → 体制key
 
   function emptyCandidates() {
-    return { venues: new Set(), groups: new Set(), liveTypes: new Set(DEFAULT_TYPES), member: new Map(), song: new Map(), costume: new Map(), cheki: new Map(), lineups: [] };
+    return { venues: new Set(), groups: new Set(), liveTypes: new Set(DEFAULT_TYPES), member: new Map(), song: new Map(), costume: new Map(), cheki: new Map(), lineups: [], accounts: {} };
   }
   function candToJSON(c) {
     const o = { venues: [...c.venues], groups: [...c.groups], liveTypes: [...c.liveTypes] };
     KINDS.forEach(k => { o[k] = {}; c[k].forEach((set, g) => { o[k][g] = [...set]; }); });
     o.lineups = c.lineups.map(l => ({ group: l.group, members: [...l.members], start: l.start || '', end: l.end || '' }));
+    o.accounts = { ...c.accounts };
     return o;
   }
   function candFromJSON(o) {
@@ -518,6 +539,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     c.liveTypes = new Set(o.liveTypes && o.liveTypes.length ? o.liveTypes : DEFAULT_TYPES);
     KINDS.forEach(k => Object.entries(o[k] || {}).forEach(([g, items]) => c[k].set(g, new Set(items))));
     c.lineups = Array.isArray(o.lineups) ? o.lineups.map(l => ({ group: l.group, members: [...(l.members || [])], start: l.start || '', end: l.end || '' })) : [];
+    c.accounts = o.accounts && typeof o.accounts === 'object' ? { ...o.accounts } : {};
     return c;
   }
   function addTo(c, kind, group, item) {
@@ -850,7 +872,9 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     if (currentLineup && !lineupMap.has(currentLineup)) currentLineup = '';
     if (currentLineup && lineupMap.get(currentLineup).group !== g) { currentLineup = ''; lineupManual = false; }
     if (auto && !lineupManual) {
-      const best = pickLineupByDate(list, F.date.value);
+      let best = pickLineupByDate(list, F.date.value), why = 'その日付の体制を自動で選びました';
+      if (!best && list.length) { best = list[list.length - 1]; why = '最新の体制を自動で選びました'; }
+      lineupWhy = best ? why : '';
       if (best && best.key !== currentLineup) setLineup(best.key);
     }
     sel.innerHTML = !g ? '<option value="">先にグループを入力してください</option>'
@@ -892,21 +916,33 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   const TWEET_RE = /^https?:\/\/(?:www\.|mobile\.)?(?:x|twitter)\.com\/[^/\s]+\/status\/(\d+)/;
   const tweetId = url => (String(url).match(TWEET_RE) || [])[1] || '';
   // X の公式埋め込み情報（本文）を取得。取れなくてもURLだけで保存できる
-  function fetchTweetText(url) {
+  async function fetchTweetText(url) { return (await fetchTweetInfo(url)).text; }
+  // 本文と投稿日を取得（Xの公式の埋め込み情報を使う。非公開・削除済みは取れない）
+  function fetchTweetInfo(url) {
     return new Promise(resolve => {
       const cb = '__tw' + Date.now() + Math.floor(Math.random() * 1000);
       const sc = document.createElement('script');
       const done = v => { clearTimeout(timer); delete window[cb]; sc.remove(); resolve(v); };
-      const timer = setTimeout(() => done(''), 6000);
+      const empty = { text: '', date: '', author: '' };
+      const timer = setTimeout(() => done(empty), 8000);
       window[cb] = data => {
         try {
           const doc = new DOMParser().parseFromString(data.html || '', 'text/html');
           const p = doc.querySelector('blockquote p');
-          if (p) p.querySelectorAll('br').forEach(br => br.replaceWith('\n'));
-          done(p ? p.textContent.trim() : '');
-        } catch (e) { done(''); }
+          if (p) {
+            p.querySelectorAll('br').forEach(br => br.replaceWith('\n'));
+            p.querySelectorAll('a').forEach(a => { if (/^https?:\/\/t\.co\//.test(a.textContent) || /^pic\.twitter\.com/.test(a.textContent)) a.remove(); });
+          }
+          const links = doc.querySelectorAll('blockquote > a');
+          const dt = links.length ? links[links.length - 1].textContent.trim() : '';
+          let date = '';
+          const jm = dt.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/);
+          if (jm) date = `${jm[1]}-${pad(jm[2])}-${pad(jm[3])}`;
+          else { const t = new Date(dt); if (!isNaN(t)) date = `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}`; }
+          done({ text: p ? p.textContent.trim() : '', date, author: data.author_name || '', authorUrl: data.author_url || '' });
+        } catch (e) { done(empty); }
       };
-      sc.onerror = () => done('');
+      sc.onerror = () => done(empty);
       sc.src = 'https://publish.twitter.com/oembed?omit_script=1&lang=ja&url=' + encodeURIComponent(url.replace(/\/\/(www\.|mobile\.)?x\.com/, '//twitter.com')) + '&callback=' + cb;
       document.head.appendChild(sc);
     });
@@ -1014,14 +1050,20 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       .filter(([, v]) => !v).map(([k]) => k);
     if (missing.length) { toast(`${missing.join('・')}を入力してください`, 'error'); return; }
     const wasEdit = !!editingId;
+    let learned = '';
+    if (tweetAccount && entry.group && !groupOfAccount(tweetAccount)) {
+      cand.accounts[tweetAccount] = entry.group; Store.saveCandidates();
+      learned = `。@${tweetAccount} を「${entry.group}」のアカウントとして覚えました`;
+    }
     resetForm();
-    Store.putLive(entry); toast(wasEdit ? '更新しました' : '保存しました');
+    Store.putLive(entry); toast((wasEdit ? '更新しました' : '保存しました') + learned);
   });
   $('cancelEditButton').addEventListener('click', () => { resetForm(); toast('編集をやめました'); });
 
   function resetForm() {
     $('liveEntryForm').reset();
     currentCheki = []; currentMembers = []; currentLineup = ''; lineupManual = false; currentChekiTweets = []; renderChekiTweets();
+    tweetAccount = ''; lastFetched = ''; currentHints = []; renderHints([]); $('parseResult').hidden = true; $('tweetUrl').value = ''; $('tweetText').value = '';
     renderCheki(); refreshLineupSelect(false);
     editingId = null;
     $('submitButton').textContent = '保存する';
@@ -1248,6 +1290,9 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     $('lmFormTitle').textContent = '体制を追加'; $('lmSave').textContent = '体制を保存'; $('lmCancel').hidden = true;
     renderLmForm();
   }
+  const normAcc = a => String(a || '').trim().replace(/^[@＠]/, '').replace(/^https?:\/\/(www\.)?(x|twitter)\.com\//i, '').split(/[/?\s]/)[0].toLowerCase();
+  const accountsOf = g => Object.entries(cand.accounts || {}).filter(([, gg]) => gg === g).map(([a]) => a).sort();
+  const groupOfAccount = a => (a && cand.accounts && cand.accounts[a]) || '';
   function renderLineupManage() {
     const sel = $('lmGroup'), keep = sel.value;
     sel.innerHTML = '<option value="">グループを選択…</option>' + sortJa(view.groups).map(g => `<option value="${esc(g)}">${esc(g)}</option>`).join('');
@@ -1259,6 +1304,10 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     $('lmMembers').innerHTML = members.size
       ? [...members].map(m => `<span class="chip">${esc(m)}<button type="button" data-lmdelmember="${esc(m)}" aria-label="${esc(m)}を候補から削除">×</button></span>`).join('')
       : '<p class="empty">まだ登録されていません</p>';
+    const accs = accountsOf(g);
+    $('lmAccounts').innerHTML = accs.length
+      ? accs.map(a => `<span class="chip">@${esc(a)}<button type="button" data-lmdelacc="${esc(a)}" aria-label="@${esc(a)}を削除">×</button></span>`).join('')
+      : '<p class="empty">まだ登録されていません</p>';
     const list = lineupsOfGroup(g);
     $('lmLineups').innerHTML = list.length ? list.map(l => `
       <div class="lineup-card">
@@ -1268,6 +1317,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     renderLmForm();
   }
   $('lmGroup').addEventListener('change', () => { resetLmForm(); renderLineupManage(); });
+  $('lmAccountIn').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) $('lmAccountAdd').click(); });
   $('lmMemberIn').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) $('lmMemberAdd').click(); });
   $('lmPickAdd').addEventListener('click', () => lmPick($('lmPickIn').value));
   $('lmPickAll').addEventListener('click', () => { lmPick([...(view.member.get(lmGroup()) || [])].join('、')); });
@@ -1276,6 +1326,21 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     const t = e.target.closest('button');
     if (!t) return;
     const g = lmGroup();
+    if (t.id === 'lmAccountAdd') {
+      const a = normAcc($('lmAccountIn').value);
+      if (!/^[a-z0-9_]{1,15}$/.test(a)) return toast('アカウント名（英数字と_）を入力してください', 'error');
+      const other = groupOfAccount(a);
+      if (other === g) return toast('すでに登録されています');
+      if (other && !await confirmBox(`@${a} は「${other}」に登録されています。「${g}」に変更しますか？`)) return;
+      cand.accounts[a] = g; $('lmAccountIn').value = ''; Store.saveCandidates(); toast(`@${a} を登録しました`);
+      return;
+    }
+    if (t.dataset.lmdelacc) {
+      const a = t.dataset.lmdelacc;
+      if (!await confirmBox(`@${a} の登録を外しますか？`)) return;
+      delete cand.accounts[a]; Store.saveCandidates(); toast(`@${a} の登録を外しました`);
+      return;
+    }
     if (t.id === 'lmMemberAdd') {
       const names = $('lmMemberIn').value.split(/[、,，]/).map(s => s.trim()).filter(Boolean);
       const added = names.filter(n => !(view.member.get(g)?.has(n)) && addTo(cand, 'member', g, n));
@@ -1433,6 +1498,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       });
       cand.groups.add(to);
       cand.lineups.forEach(l => { if (F.has(l.group)) l.group = to; });
+      Object.keys(cand.accounts).forEach(a => { if (F.has(cand.accounts[a])) cand.accounts[a] = to; });
     } else if (!isScoped(k)) {
       froms.forEach(f => cand[k].delete(f)); cand[k].add(to);
     } else {
@@ -1489,7 +1555,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       const pics = isGroup ? costumeImgs.filter(x => x.group === item) : k === 'costume' ? imgsOf(g, item) : [];
       if (!await confirmBox(`「${item}」を候補から削除しますか？${isGroup ? '（このグループの体制・メンバー・楽曲・衣装・チェキ相手の候補も消えます）' : ''}${pics.length ? `\n衣装の写真${pics.length}枚も削除されます。` : ''}`)) return;
       for (const x of pics) await Store.deleteCostumeImage(x.id);
-      if (isGroup) { cand.groups.delete(item); KINDS.forEach(kind => cand[kind].delete(item)); cand.lineups = cand.lineups.filter(l => l.group !== item); }
+      if (isGroup) { cand.groups.delete(item); KINDS.forEach(kind => cand[kind].delete(item)); cand.lineups = cand.lineups.filter(l => l.group !== item); Object.keys(cand.accounts).forEach(a => { if (cand.accounts[a] === item) delete cand.accounts[a]; }); }
       else if (isScoped(k)) cand[k].get(g)?.delete(item);
       else cand[k].delete(item);
       await Store.saveCandidates();
@@ -1627,7 +1693,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   const looksLikeHandle = s => /^[A-Za-z0-9_]{1,15}$/.test(s) && /[_0-9]/.test(s);
 
   function parseSetlistText(text) {
-    const r = { date: '', dateSource: '', venue: '', group: '', liveName: '', liveType: '', costume: '', members: [], songs: [], newSongs: [], hashtags: [], absent: '' };
+    const r = { date: '', dateSource: '', venue: '', group: '', groupSource: '', liveName: '', liveType: '', costume: '', members: [], songs: [], newSongs: [], hashtags: [], absent: '', hints: [] };
     const cleaned = String(text || '').replace(/https?:\/\/\S+/g, '').replace(/pic\.twitter\.com\/\S+/g, '').replace(/\r/g, '');
     r.hashtags = [...cleaned.matchAll(/[#＃]([^\s#＃]+)/g)].map(m => m[1]);
     const lines = cleaned.split('\n').map(l => l.replace(/[​﻿]/g, '').trim()).filter(Boolean);
@@ -1648,16 +1714,26 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       if (used.has(i)) continue;
       const d = findDate(lines[i]);
       if (!d || d.m < 1 || d.m > 12 || d.d < 1 || d.d > 31) continue;
-      r.date = `${d.y || inferYear(d.m, d.d)}-${pad(d.m)}-${pad(d.d)}`;
-      r.dateSource = d.y ? '' : '年は推定';
+      let y = d.y, src = '';
+      if (!y && tweetPostDate) { // 投稿日から年を決める（投稿日より後の月日なら前の年）
+        const py = +tweetPostDate.slice(0, 4), md = `${pad(d.m)}-${pad(d.d)}`;
+        y = md > tweetPostDate.slice(5) && (+d.m - +tweetPostDate.slice(5, 7)) > 1 ? py - 1 : py;
+        src = '年は投稿日から判断';
+      }
+      if (!y) { y = inferYear(d.m, d.d); src = '年は推定'; }
+      r.date = `${y}-${pad(d.m)}-${pad(d.d)}`;
+      r.dateSource = src;
       dateRest = stripBrackets(lines[i].replace(d.raw, '').replace(WEEKDAY_RE, '').replace(HEADER_RE, ''));
       used.add(i);
       break;
     }
 
+    if (!r.date && tweetPostDate) { r.date = tweetPostDate; r.dateSource = 'ツイートの投稿日'; }
+
     // 3) グループ
     const groups = [...view.groups];
     if (label.group) r.group = canonical(label.group, groups) || longestContained(label.group, groups) || label.group;
+    if (!r.group && groupOfAccount(tweetAccount)) { r.group = groupOfAccount(tweetAccount); r.groupSource = `@${tweetAccount} から判別`; }
     if (!r.group) r.group = longestContained(cleaned, groups) || '';
     if (!r.group) for (const h of r.hashtags) { const c = canonical(h, groups); if (c) { r.group = c; break; } }
     lines.forEach((l, i) => {
@@ -1670,14 +1746,16 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     let venueRaw = label.venue || '';
     if (!venueRaw) {
       for (let i = 0; i < lines.length; i++) {
-        const m = lines[i].match(/[@＠]\s*([^\n]+)/);
+        const m = lines[i].match(/(?:[@＠]|\s+at\s+|^at\s+|\s+in\s+)\s*([^\n]+)/i);
         if (!m) continue;
         const v = m[1].replace(/[#＃]\S+/g, '').replace(/(にて|で)?[!！]*$/, '').trim();
         const words = v.split(/\s+/);
         if (!v || (words.length === 1 && looksLikeHandle(words[0]))) continue;
         venueRaw = v;
         const before = stripBrackets(lines[i].slice(0, m.index).replace(findDate(lines[i])?.raw || '', '').replace(WEEKDAY_RE, '').replace(HEADER_RE, '').replace(/[【】\[\]『』]/g, ' '));
-        if (before) nameFromVenueLine = before;
+        const inBr = lines[i].slice(0, m.index).match(/[「『【\[［](.+?)[」』】\]］]/);
+        if (inBr && !HEADER_RE.test(inBr[1])) nameFromVenueLine = inBr[1].trim();
+        else if (before) nameFromVenueLine = before;
         if (dateRest) dateRest = stripBrackets(dateRest.replace(m[0], '').replace(v, ''));
         used.add(i);
         break;
@@ -1759,11 +1837,56 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     const costumes = r.group ? gItems('costume', r.group) : [];
     if (label.costume) r.costume = canonical(label.costume, costumes) || label.costume;
     else r.costume = longestContained(lines.filter((_, i) => !songLines.some(s => s.i === i)).join('\n'), costumes) || '';
+
+    // 10) ライブ名・会場の候補（セトリ以外の文から切り出す）
+    const skip = new Set([r.group, ...known, ...r.songs, ...knownSongs].filter(Boolean).map(loose));
+    const hints = [];
+    const pushHint = v => {
+      v = stripBrackets(String(v || '').replace(/^[\s\-－・:：|｜/／>＞→＝=]+|[\s\-－・:：|｜/／!！]+$/g, ''));
+      if (/ありがと|お疲れ|おつかれ|来場|ご覧|お越し|応援|感謝|よろしく|お願い|楽しかった|最高でした|待ってます|^本日$|^今日$/.test(v)) return;
+      const k = loose(v);
+      if (v.length < 2 || v.length > 40 || !k || /^\d+$/.test(k) || skip.has(k)) return;
+      if (HEADER_RE.test(v) && v.replace(HEADER_RE, '').trim().length < 2) return;
+      if (hints.some(h => loose(h) === k)) return;
+      hints.push(v);
+    };
+    lines.forEach((l, i) => {
+      if (songLines.some(s => s.i === i) || /^([#＃]\S+\s*)+$/.test(l)) return;
+      let t = l.replace(/[#＃]\S+/g, ' ');
+      const dd = findDate(t); if (dd) t = t.replace(dd.raw, ' ');
+      t = t.replace(WEEKDAY_RE, ' ').replace(HEADER_RE, ' ').replace(/^(本日の|今日の)/, '')
+        .replace(/^(?:📍|🏠|👗|🎤|🎵|🎶|📅|🗓️?|⏰)/u, '').replace(/^(?:会場|場所|ハコ|ライブ名|イベント名?|公演名?|タイトル)\s*[:：]?/, '')
+        .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, ' ');
+      // 括弧の中身は1つの候補として
+      [...t.matchAll(/[【「『\[［〈《](.+?)[】」』\]］〉》]/g)].forEach(m => pushHint(m[1]));
+      t.replace(/[【「『\[［〈《].+?[】」』\]］〉》]/g, '\n').split(/[@＠]|\n|[|｜／]|\s{2,}|　|\s+at\s+|\s+in\s+/i).forEach(pushHint);
+      if (!/\s(at|in)\s|[@＠]/i.test(t)) pushHint(t.replace(/[【「『\[［〈《】」』\]］〉》]/g, ' ').replace(/\s+/g, ' '));
+    });
+    r.hashtags.forEach(h => pushHint(h.replace(/_/g, ' ')));
+    // 既に知っている会場を先頭に
+    r.hints = hints.sort((a, b) => (view.venues.has(b) ? 1 : 0) - (view.venues.has(a) ? 1 : 0)).slice(0, 12);
     return r;
   }
 
+  function renderHints(hints) {
+    const draw = (boxId, input) => {
+      const list = (hints || []).filter(h => h !== input.value.trim());
+      const box = $(boxId);
+      box.hidden = !list.length;
+      box.innerHTML = list.length ? '<span class="lead">ツイートから:</span>' + list.map(h => `<button type="button" data-hint="${esc(h)}">${esc(h)}</button>`).join('') : '';
+    };
+    draw('nameHints', F.name); draw('venueHints', F.venue);
+  }
+  let currentHints = [];
+  ['nameHints', 'venueHints'].forEach(id => $(id).addEventListener('click', e => {
+    const b = e.target.closest('[data-hint]');
+    if (!b) return;
+    (id === 'nameHints' ? F.name : F.venue).value = b.dataset.hint;
+    renderHints(currentHints);
+  }));
   function applyParsed(r) {
     const set = (el, v) => { if (v) el.value = v; };
+    currentHints = r.hints || [];
     set(F.date, r.date); set(F.venue, r.venue); set(F.group, r.group); set(F.name, r.liveName);
     set(F.type, r.liveType); set(F.costume, r.costume);
     lineupManual = false;
@@ -1777,7 +1900,8 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       currentMembers = [...new Set(r.members)]; renderMembers();
     } else refreshLineupSelect(true);
     if (r.songs.length) F.setlist.value = r.songs.join('\n');
-    const url = $('tweetUrl').value.trim();
+    renderHints(currentHints);
+    const url = $('tweetUrl').value.trim().split('?')[0];
     if (url && !F.memo.value.includes(url)) F.memo.value = (F.memo.value ? F.memo.value + '\n' : '') + '元ツイート: ' + url;
   }
   function renderParseResult(r) {
@@ -1789,24 +1913,54 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
         ${row('ライブ名', r.liveName)}
         ${row('種類', r.liveType)}
         ${row('会場', r.venue, r.venue && !view.venues.has(r.venue) ? '新しい会場' : '')}
-        ${row('グループ', r.group, r.group && !view.groups.has(r.group) ? '新しいグループ' : '')}
-        ${row('体制', currentLineup ? lineupMap.get(currentLineup)?.name : '', currentLineup ? '日付から自動で選びました' : '')}
+        ${row('グループ', r.group, r.groupSource || (r.group && !view.groups.has(r.group) ? '新しいグループ' : ''))}
+        ${row('体制', currentLineup ? lineupMap.get(currentLineup)?.name : '', currentLineup ? (r.members.length ? 'ツイートのメンバーから選びました' : lineupWhy) : '')}
         ${row('メンバー', currentMembers.join('、'), r.absent ? '休演: ' + r.absent : '')}
         ${row('衣装', r.costume)}
         ${row('セトリ', r.songs.length ? r.songs.length + '曲' : '', r.newSongs.length ? '未登録の曲: ' + r.newSongs.join(' / ') : '')}
       </dl>
+      ${tweetAccount && !groupOfAccount(tweetAccount) ? `<p class="hint">@${esc(tweetAccount)} はまだグループに登録されていません。このまま保存すると、次からこのアカウントのツイートは「${esc(F.group.value.trim() || 'このグループ')}」として判別します。</p>` : ''}
+      ${currentHints.length ? '<p class="hint">ライブ名・会場の欄の下に、ツイートから切り出した候補を出しています。押すとその欄に入ります。</p>' : ''}
       ${!r.group && r.hashtags.length ? `<p class="hint">ハッシュタグ: ${r.hashtags.map(h => '#' + esc(h)).join(' ')}。グループを「候補の管理」に登録しておくと次から自動で判別します。</p>` : ''}
       ${!r.songs.length ? '<p class="hint">曲が見つかりませんでした。セトリが画像のツイートは読み取れないので、フォームに入力してください。</p>' : ''}`;
     box.hidden = false;
   }
-  $('parseTweetBtn').addEventListener('click', () => {
+  function runParse() {
     const text = $('tweetText').value.trim();
-    if (!text) return toast('ツイート本文を貼り付けてください', 'error');
+    if (!text) { $('tweetTextBox').open = true; return toast('ツイート本文を貼り付けてください', 'error'); }
     const r = parseSetlistText(text);
     applyParsed(r); renderParseResult(r);
     toast('フォームに反映しました');
-  });
-  $('clearTweetBtn').addEventListener('click', () => { $('tweetText').value = ''; $('tweetUrl').value = ''; $('parseResult').hidden = true; });
+  }
+  $('parseTweetBtn').addEventListener('click', runParse);
+  let lastFetched = '';
+  async function loadFromUrl() {
+    const url = $('tweetUrl').value.trim().split('?')[0];
+    if (!tweetId(url)) return toast('ツイートのURL（…/status/数字）を貼ってください', 'error');
+    const btn = $('fetchTweetBtn');
+    btn.disabled = true; btn.textContent = '読み込み中…';
+    try {
+      const info = await fetchTweetInfo(url);
+      if (!info.text) {
+        tweetPostDate = '';
+        $('tweetTextBox').open = true;
+        return toast('本文を読み込めませんでした（非公開・削除済み、または通信エラー）。本文をコピーして貼り付けてください', 'error');
+      }
+      if (!editingId && lastFetched && lastFetched !== url) { resetForm(); $('tweetUrl').value = url; } // 別のツイートを読み込むときは前の内容を消す
+      lastFetched = url;
+      tweetPostDate = info.date;
+      const fromUrl = normAcc((url.match(/(?:x|twitter)\.com\/([^/]+)\/status/i) || [])[1]);
+      tweetAccount = fromUrl && fromUrl !== 'i' ? fromUrl : normAcc(info.authorUrl);
+      $('tweetText').value = info.text;
+      runParse();
+    } finally { btn.disabled = false; btn.textContent = 'URLから読み込む'; }
+  }
+  $('fetchTweetBtn').addEventListener('click', loadFromUrl);
+  // URLを貼り付けたら自動で読み込む
+  $('tweetUrl').addEventListener('paste', () => setTimeout(() => { const u = $('tweetUrl').value.trim().split('?')[0]; if (tweetId(u) && u !== lastFetched) loadFromUrl(); }, 50));
+  $('tweetUrl').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); loadFromUrl(); } });
+  $('tweetUrl').addEventListener('input', () => { if ($('tweetUrl').value.trim().split('?')[0] !== lastFetched) { tweetPostDate = ''; tweetAccount = ''; } });
+  $('clearTweetBtn').addEventListener('click', () => { $('tweetText').value = ''; $('tweetUrl').value = ''; tweetPostDate = ''; tweetAccount = ''; lastFetched = ''; $('parseResult').hidden = true; currentHints = []; renderHints([]); });
 
   // ================= 衣装の写真 =================
   const imgsOf = (group, costume) => costumeImgs.filter(x => x.group === group && x.costume === costume);
