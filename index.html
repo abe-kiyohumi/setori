@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#c92c68">
 <title>セトリ記録帳</title>
+<!-- ホーム画面に追加してアプリとして開くための設定 -->
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="セトリ記録帳">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700&family=Noto+Sans+JP:wght@400;500;700&display=swap">
@@ -244,6 +252,7 @@ h4 { margin: 0; font-size: 0.88rem; color: var(--muted); letter-spacing: 0.03em;
   <section id="loginGate" class="panel">
     <h2>ログインしてください</h2>
     <p class="hint">ログインすると、PC・スマホのどれからでも同じライブデータを見たり記録したりできます。データはそのアカウントだけが読み書きできます。</p>
+    <p id="pwaHint" class="hint" hidden style="color:var(--warn)">ホーム画面のアプリでは、Googleでのログインがうまくいかないことがあります。その場合は下のメールアドレスとパスワードでログインしてください。</p>
     <button type="button" id="loginBtn" class="btn primary">Googleでログイン</button>
     <div class="panel inset">
       <h3>メールアドレスとパスワードでログイン</h3>
@@ -843,6 +852,9 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     else login();
   });
   $('loginBtn').addEventListener('click', login);
+  // ホーム画面のアプリとして開いているか
+  const isStandalone = matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  if (isStandalone) $('pwaHint').hidden = false;
 
   // ----- メールアドレス＋パスワード -----
   const AUTH_MSG = {
@@ -2462,6 +2474,12 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   Store.init();
   window.__parseSetlistText = parseSetlistText; // 動作確認用
 })();
+</script>
+<script>
+  // ホーム画面のアプリ用（サービスワーカーの登録）
+  if ('serviceWorker' in navigator && location.protocol === 'https:') {
+    window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
+  }
 </script>
 </body>
 </html>
