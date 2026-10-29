@@ -339,7 +339,7 @@ h4 { margin: 0; font-size: 0.88rem; color: var(--muted); letter-spacing: 0.03em;
         <div id="costumePreview" class="thumbs" style="margin-top:6px"></div></div>
 
       <div class="panel inset">
-        <h3>チェキ</h3>
+        <h3 id="chekiHead">チェキ</h3>
         <div id="chekiChips" class="chips"></div>
         <div class="row">
           <div class="grow"><input id="chekiPartnerInput" class="field" placeholder="チェキ相手（一部で候補表示）"></div>
@@ -355,7 +355,7 @@ h4 { margin: 0; font-size: 0.88rem; color: var(--muted); letter-spacing: 0.03em;
       </div>
 
       <div class="live-only">
-        <label class="lbl req" for="liveSetlist">セットリスト（1行に1曲）</label>
+        <label class="lbl req" for="liveSetlist" id="setlistLabel">セットリスト（1行に1曲）</label>
         <textarea id="liveSetlist" class="field" rows="7" placeholder="曲A&#10;曲B&#10;曲C"></textarea>
         <div class="row" style="margin-top:8px">
           <div class="grow"><input id="addSongInput" class="field" placeholder="既存の曲を追加（一部を入力すると候補が出ます）"></div>
@@ -591,13 +591,14 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   let liveLineup = new Map();       // ライブID → 体制key
 
   function emptyCandidates() {
-    return { venues: new Set(), groups: new Set(), liveTypes: new Set(DEFAULT_TYPES), member: new Map(), song: new Map(), costume: new Map(), cheki: new Map(), lineups: [], accounts: {} };
+    return { venues: new Set(), groups: new Set(), liveTypes: new Set(DEFAULT_TYPES), member: new Map(), song: new Map(), costume: new Map(), cheki: new Map(), lineups: [], accounts: {}, mergeIgnore: [] };
   }
   function candToJSON(c) {
     const o = { venues: [...c.venues], groups: [...c.groups], liveTypes: [...c.liveTypes] };
     KINDS.forEach(k => { o[k] = {}; c[k].forEach((set, g) => { o[k][g] = [...set]; }); });
     o.lineups = c.lineups.map(l => ({ group: l.group, members: [...l.members], start: l.start || '', end: l.end || '' }));
     o.accounts = { ...c.accounts };
+    o.mergeIgnore = [...(c.mergeIgnore || [])];
     return o;
   }
   function candFromJSON(o) {
@@ -608,6 +609,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     KINDS.forEach(k => Object.entries(o[k] || {}).forEach(([g, items]) => c[k].set(g, new Set(items))));
     c.lineups = Array.isArray(o.lineups) ? o.lineups.map(l => ({ group: l.group, members: [...(l.members || [])], start: l.start || '', end: l.end || '' })) : [];
     c.accounts = o.accounts && typeof o.accounts === 'object' ? { ...o.accounts } : {};
+    c.mergeIgnore = Array.isArray(o.mergeIgnore) ? [...o.mergeIgnore] : [];
     return c;
   }
   function addTo(c, kind, group, item) {
@@ -1174,6 +1176,14 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   }
   $('addSongButton').addEventListener('click', () => addSong($('addSongInput').value));
 
+  // 衣装・チェキ・セットリストの見出しに、今どのステージを入力しているかを出す
+  function updatePartHeads() {
+    const live = getKind() === 'live', multi = live && formParts.length > 1;
+    const nm = multi ? `（${$('partLabel').value.trim() || partName(formParts[activePart], activePart)}）` : '';
+    $('costumeLabel').textContent = live ? `衣装${nm}` : '衣装（チェキの衣装・任意）';
+    $('chekiHead').textContent = `チェキ${nm}`;
+    $('setlistLabel').textContent = `セットリスト${nm}（1行に1曲）`;
+  }
   // ----- 記録の種類の切り替え -----
   const getKind = () => (document.querySelector('input[name="recKind"]:checked') || {}).value || 'live';
   function setKind(k) { const r = document.querySelector(`input[name="recKind"][value="${k}"]`); if (r) r.checked = true; applyKind(); }
@@ -1183,7 +1193,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     $('venueField').hidden = k === 'online';
     $('nameLabel').textContent = live ? 'ライブ名' : k === 'cheki' ? 'イベント名（任意）' : '販売・企画の名前（任意）';
     $('dateLabel').textContent = k === 'online' ? '日付（撮影日・購入日など）' : '日付';
-    $('costumeLabel').textContent = live ? '衣装' : '衣装（チェキの衣装・任意）';
+    updatePartHeads();
     $('kindHint').hidden = live;
     $('kindHint').textContent = k === 'cheki' ? 'ライブはなく、チェキ会・特典会でチェキを撮ったときの記録です。日付・グループ・チェキ（相手と枚数）を入れて保存してください。セットリストは不要です。'
       : k === 'online' ? '現地に行かずにオンラインで購入したチェキの記録です。日付・グループ・チェキ（相手と枚数）を入れて保存してください。' : '';
@@ -1220,6 +1230,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     const now = $('partNow');
     now.hidden = !multi;
     now.textContent = multi ? `▼ ここから下は「${$('partLabel').value.trim() || partName(formParts[activePart], activePart)}」の衣装・チェキ・セットリストです` : '';
+    updatePartHeads();
   }
   $('partTabs').addEventListener('click', e => {
     const b = e.target.closest('[data-part]');
@@ -1343,7 +1354,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
         <span class="name">${esc(d.liveName || d.liveType || 'ライブ')}</span>
         <span class="sub">${d.liveType ? `<span class="tag">${esc(d.liveType)}</span>` : ''}<span class="tag parts">${ps.length}ステージ</span><b>${esc(d.group || '—')}</b> ／ ${esc(d.venue || '会場未記録')}</span>
         ${memberLine(d)}
-        ${ps.map((p, i) => `<div class="part-block"><span class="plabel">${esc(partName(p, i))}${p.costume ? `<span class="note" style="font-weight:400;color:var(--muted)"> ／ 衣装: ${esc(p.costume)}</span>` : ''}</span>${partHTML(d, p, deleted, false)}</div>`).join('')}
+        ${ps.map((p, i) => `<div class="part-block"><span class="plabel">${esc(partName(p, i))}${p.costume ? `<span class="note" style="font-weight:400;color:var(--muted)"> ／ 衣装: ${esc(p.costume)}</span>` : ''}</span>${partHTML(d, p, deleted, false)}${deleted ? '' : `<div><button type="button" class="btn sm" data-act="cheki-part" data-id="${esc(d.id)}" data-part="${i}">＋このステージのチェキを追加</button></div>`}</div>`).join('')}
         ${d.memo && !deleted ? `<div class="memo">${esc(d.memo)}</div>` : ''}
       </div>
       <div class="btns">${btns}</div>
@@ -1418,6 +1429,10 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     if (!d) return;
     try {
       if (b.dataset.act === 'edit') editLive(id);
+      else if (b.dataset.act === 'cheki-part') {
+        editLive(id); savePartFromForm(); loadPartToForm(+b.dataset.part || 0);
+        setTimeout(() => { $('chekiHead').scrollIntoView({ behavior: 'smooth', block: 'start' }); $('chekiPartnerInput').focus({ preventScroll: true }); }, 50);
+      }
       else if (b.dataset.act === 'copy') copyText(JSON.stringify(stripMeta(d), null, 2), 'このライブをコピーしました');
       else if (b.dataset.act === 'delete') {
         if (!await confirmBox('このライブを削除しますか？「最近削除したライブ」から復元できます。')) return;
@@ -1475,19 +1490,34 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   function mergeCandidates() {
     const map = new Map();
     liveData.filter(isLive).forEach(d => { const k = `${d.date}::${d.group}`; if (!map.has(k)) map.set(k, []); map.get(k).push(d); });
-    return [...map.values()].filter(a => a.length > 1).sort((a, b) => (b[0].date || '').localeCompare(a[0].date || ''));
+    const ignore = new Set(cand.mergeIgnore || []);
+    return [...map.values()].filter(a => a.length > 1 && !ignore.has(mergeKey(a))).sort((a, b) => (b[0].date || '').localeCompare(a[0].date || ''));
   }
+  // 「まとめない」にした組の目印（ライブの組み合わせが変われば、また候補に出る）
+  const mergeKey = a => a.map(d => d.id).sort().join(',');
   function renderMergePanel() {
     const sets = mergeCandidates();
-    $('mergePanel').hidden = !sets.length;
-    $('mergeTitle').textContent = `同じ日のライブをまとめる（${sets.length}組）`;
+    const ignored = (cand.mergeIgnore || []).length;
+    $('mergePanel').hidden = !sets.length && !ignored;
+    $('mergeTitle').textContent = sets.length ? `同じ日のライブをまとめる（${sets.length}組）` : '同じ日のライブをまとめる（候補はありません）';
     $('mergeList').innerHTML = sets.map(a => {
       const plan = planMerge(a);
       return `<div class="mrow"><span><b>${esc(a[0].date)}</b> ${esc(a[0].group)} ／ ${esc(plan.merged.liveName || '（ライブ名なし）')}<br><span class="hint">${a.length}件 → ${esc(plan.labels.join('／'))}</span></span>
-        <button type="button" class="btn sm primary" data-merge-ids="${esc(a.map(d => d.id).join(','))}">1つにまとめる</button></div>`;
-    }).join('');
+        <span class="row"><button type="button" class="btn sm primary" data-merge-ids="${esc(a.map(d => d.id).join(','))}">1つにまとめる</button><button type="button" class="btn sm" data-merge-skip="${esc(mergeKey(a))}">まとめない</button></span></div>`;
+    }).join('') + (ignored ? `<div class="mrow"><span class="hint">「まとめない」にした組: ${ignored}組</span><button type="button" class="btn sm" data-merge-reset="1">候補に戻す</button></div>` : '');
   }
   $('mergeList').addEventListener('click', async e => {
+    const skip = e.target.closest('[data-merge-skip]');
+    if (skip) {
+      cand.mergeIgnore = [...new Set([...(cand.mergeIgnore || []), skip.dataset.mergeSkip])];
+      Store.saveCandidates(); toast('この組は候補から外しました（下の「候補に戻す」で戻せます）');
+      return;
+    }
+    if (e.target.closest('[data-merge-reset]')) {
+      if (!await confirmBox(`「まとめない」にした${cand.mergeIgnore.length}組を、まとめる候補に戻しますか？`)) return;
+      cand.mergeIgnore = []; Store.saveCandidates(); toast('候補に戻しました');
+      return;
+    }
     const b = e.target.closest('[data-merge-ids]');
     if (!b) return;
     const lives = b.dataset.mergeIds.split(',').map(id => liveData.find(d => d.id === id)).filter(Boolean);
