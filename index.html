@@ -180,6 +180,25 @@ h4 { margin: 0; font-size: 0.88rem; color: var(--muted); letter-spacing: 0.03em;
 .hintchips .lead { font-size: 0.78rem; color: var(--muted); }
 .hintchips button { border: 1px dashed var(--accent); background: var(--accent-soft); color: var(--ink); border-radius: 999px; padding: 2px 10px; font: inherit; font-size: 0.82rem; cursor: pointer; max-width: 100%; overflow-wrap: anywhere; text-align: left; }
 .hintchips button:hover { border-style: solid; }
+/* ステージ・部 */
+.parttabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.parttabs button { border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 999px; padding: 5px 14px; font: inherit; font-size: 0.9rem; cursor: pointer; max-width: 100%; overflow-wrap: anywhere; }
+.parttabs button[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
+.parttabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.part-now { font-size: 0.85rem; color: var(--accent); font-weight: 700; }
+.part-block { border-left: 3px solid var(--accent-soft); padding-left: 10px; display: flex; flex-direction: column; gap: 2px; margin-top: 6px; }
+.part-block .plabel { font-weight: 700; font-size: 0.92rem; }
+.tag.parts { background: var(--accent-soft); color: var(--accent); }
+.mergebox { display: flex; flex-direction: column; gap: 8px; }
+.mergebox .mrow { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 0; border-top: 1px solid var(--line); font-size: 0.9rem; }
+.mergebox .mrow span { min-width: 0; overflow-wrap: anywhere; }
+/* 記録の種類 */
+.kindbar { display: flex; gap: 6px; flex-wrap: wrap; }
+.kindbar label { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px; cursor: pointer; background: var(--surface); font-size: 0.92rem; }
+.kindbar input { accent-color: var(--accent); margin: 0; }
+.kindbar label:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); font-weight: 700; }
+.tag.kind-cheki { background: var(--ok-soft); color: var(--ok); }
+.tag.kind-online { background: var(--warn-soft); color: var(--warn); }
 /* 候補 */
 .cand { list-style: none; margin: 0; padding: 0; max-height: 220px; overflow-y: auto; }
 .cand li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--line); font-size: 0.92rem; }
@@ -266,17 +285,23 @@ h4 { margin: 0; font-size: 0.88rem; color: var(--muted); letter-spacing: 0.03em;
 
     <form id="liveEntryForm" class="panel" autocomplete="off">
       <h2 id="formTitle">ライブを記録</h2>
-      <div class="grid2">
-        <div><label class="lbl req" for="liveDate">日付</label><input type="date" id="liveDate" class="field"></div>
-        <div><label class="lbl" for="liveType">ライブの種類</label><input id="liveType" class="field" placeholder="定期公演 / 対バン など"></div>
+      <div class="kindbar" role="radiogroup" aria-label="記録の種類">
+        <label><input type="radio" name="recKind" value="live" checked> ライブ</label>
+        <label><input type="radio" name="recKind" value="cheki"> チェキ会・特典会のみ</label>
+        <label><input type="radio" name="recKind" value="online"> オンラインチェキ</label>
       </div>
-      <div><label class="lbl" for="liveName">ライブ名</label><input id="liveName" class="field" placeholder="例: 定期公演 vol.12"><div id="nameHints" class="hintchips" hidden></div></div>
+      <p id="kindHint" class="hint" hidden></p>
       <div class="grid2">
-        <div><label class="lbl" for="liveVenue">会場</label><input id="liveVenue" class="field" placeholder="一部を入力すると候補が出ます"><div id="venueHints" class="hintchips" hidden></div></div>
+        <div><label class="lbl req" for="liveDate" id="dateLabel">日付</label><input type="date" id="liveDate" class="field"></div>
+        <div class="live-only"><label class="lbl" for="liveType">ライブの種類</label><input id="liveType" class="field" placeholder="定期公演 / 対バン など"></div>
+      </div>
+      <div><label class="lbl" for="liveName" id="nameLabel">ライブ名</label><input id="liveName" class="field" placeholder="例: 定期公演 vol.12"><div id="nameHints" class="hintchips" hidden></div></div>
+      <div class="grid2">
+        <div id="venueField"><label class="lbl" for="liveVenue">会場</label><input id="liveVenue" class="field" placeholder="一部を入力すると候補が出ます"><div id="venueHints" class="hintchips" hidden></div></div>
         <div><label class="lbl req" for="liveGroup">グループ</label><input id="liveGroup" class="field" placeholder="一部を入力すると候補が出ます"></div>
       </div>
 
-      <div class="panel inset">
+      <div class="panel inset live-only">
         <h3>体制・出演メンバー</h3>
         <div>
           <label class="lbl" for="lineupSelect">体制</label>
@@ -293,7 +318,24 @@ h4 { margin: 0; font-size: 0.88rem; color: var(--muted); letter-spacing: 0.03em;
         </details>
       </div>
 
-      <div><label class="lbl" for="liveCostume">衣装</label><input id="liveCostume" class="field" placeholder="一部を入力すると候補が出ます">
+      <div class="panel inset live-only" id="partBar">
+        <div class="row" style="justify-content:space-between;align-items:center">
+          <h3>ステージ・部</h3>
+          <button type="button" id="addPartBtn" class="btn sm">＋ステージ・部を追加</button>
+        </div>
+        <p class="hint" id="partHint">同じ日にステージや時間が分かれたライブは「＋ステージ・部を追加」で分けて記録できます。衣装・チェキ・セットリストはステージごとに入力します。</p>
+        <div id="partTabs" class="parttabs" role="tablist" hidden></div>
+        <div id="partLabelRow" hidden>
+          <label class="lbl" for="partLabel">ステージ名・部（例: UMIステージ ／ 1部 ／ 14:00〜）</label>
+          <div class="row">
+            <div class="grow"><input id="partLabel" class="field" placeholder="ステージ名・部・時間など"></div>
+            <button type="button" id="delPartBtn" class="btn sm danger">このステージを削除</button>
+          </div>
+        </div>
+      </div>
+      <p id="partNow" class="part-now" hidden></p>
+
+      <div><label class="lbl" for="liveCostume" id="costumeLabel">衣装</label><input id="liveCostume" class="field" placeholder="一部を入力すると候補が出ます">
         <div id="costumePreview" class="thumbs" style="margin-top:6px"></div></div>
 
       <div class="panel inset">
@@ -312,7 +354,7 @@ h4 { margin: 0; font-size: 0.88rem; color: var(--muted); letter-spacing: 0.03em;
         <div id="chekiTweetList" style="display:flex;flex-direction:column;gap:8px"></div>
       </div>
 
-      <div>
+      <div class="live-only">
         <label class="lbl req" for="liveSetlist">セットリスト（1行に1曲）</label>
         <textarea id="liveSetlist" class="field" rows="7" placeholder="曲A&#10;曲B&#10;曲C"></textarea>
         <div class="row" style="margin-top:8px">
@@ -340,6 +382,7 @@ h4 { margin: 0; font-size: 0.88rem; color: var(--muted); letter-spacing: 0.03em;
       <div><label class="lbl" for="yearFilter">年</label><select id="yearFilter" class="field"><option value="all">すべて</option></select></div>
       <div><label class="lbl" for="groupFilter">グループ</label><select id="groupFilter" class="field"><option value="all">すべて</option></select></div>
       <div class="lineup-filter" hidden><label class="lbl" for="lineupFilter">体制</label><select id="lineupFilter" class="field"><option value="all">すべて</option></select></div>
+      <div><label class="lbl" for="kindFilter">記録の種類</label><select id="kindFilter" class="field"><option value="all">すべて</option><option value="live">ライブ</option><option value="cheki">チェキ会・特典会のみ</option><option value="online">オンラインチェキ</option></select></div>
       <div><label class="lbl" for="typeFilter">ライブの種類</label><select id="typeFilter" class="field"><option value="all">すべて</option></select></div>
     </div>
     <details id="moreFilters">
@@ -365,12 +408,21 @@ h4 { margin: 0; font-size: 0.88rem; color: var(--muted); letter-spacing: 0.03em;
       <div class="stats">
         <span class="stat"><b id="liveCount">0</b>ライブ</span>
         <span class="stat"><b id="totalSongsCount">0</b>曲（のべ）</span>
+        <span class="stat" id="stageStat" hidden><b id="stageCount">0</b>ステージ</span>
+        <span class="stat" id="chekiEvStat" hidden><b id="chekiEvCount">0</b>チェキ会</span>
+        <span class="stat" id="onlineStat" hidden><b id="onlineCount">0</b>オンライン</span>
+        <span class="stat"><b id="chekiTotal">0</b>枚（チェキ）</span>
       </div>
       <div class="actions">
         <button type="button" id="copyAllDataButton" class="btn">表示中のデータをコピー</button>
         <button type="button" id="pasteDataButton" class="btn">データを貼り付けて取り込む</button>
       </div>
     </div>
+    <details id="mergePanel" class="panel inset" hidden>
+      <summary style="cursor:pointer"><b id="mergeTitle">同じ日のライブをまとめる</b></summary>
+      <p class="hint">同じ日・同じグループで別々に記録されているライブです。「1つにまとめる」を押すと、1つのライブの中のステージ・部として記録し直します（セトリ・衣装・チェキはステージごとに残ります）。</p>
+      <div id="mergeList" class="mergebox"></div>
+    </details>
     <div id="liveDataList" class="lives"></div>
 
     <div class="panel inset deleted">
@@ -526,13 +578,15 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   let cand = emptyCandidates();      // 保存されている候補
   let view = emptyCandidates();      // 保存候補 ＋ ライブデータから集めた候補（表示用）
   let currentCheki = [], currentMembers = [], currentChekiTweets = [];
+  let formParts = [emptyPartSafe()], activePart = 0;
+  function emptyPartSafe() { return { label: '', costume: '', setlist: '', chekiDetails: [], chekiTweets: [] }; }
   let tweetPostDate = ''; // URLから読み込んだツイートの投稿日
   let tweetAccount = '';  // URLから読み込んだツイートのアカウント（小文字・@なし）
   let lineupWhy = '';     // 体制を自動で選んだ理由
   let costumeImgs = [];   // { id, group, costume, thumb, createdAt }
   let currentLineup = '', lineupManual = false;
   let editingId = null, fYear = 'all', fGroup = 'all', fLineup = 'all', sortOrder = 'desc';
-  let fType = 'all', fFrom = '', fTo = '', fSong = '', fVenue = '', fCostume = '', fMember = '';
+  let fKind = 'all', fType = 'all', fFrom = '', fTo = '', fSong = '', fVenue = '', fCostume = '', fMember = '';
   let lineupMap = new Map();        // key → 体制（名前・期間付き）
   let liveLineup = new Map();       // ライブID → 体制key
 
@@ -573,13 +627,44 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       if ((d.venue || '').trim()) view.venues.add(d.venue.trim());
       if ((d.liveType || '').trim()) view.liveTypes.add(d.liveType.trim());
       if (!g) return;
-      addTo(view, 'costume', g, d.costume);
-      splitSongs(d.setlist).forEach(s => addTo(view, 'song', g, s));
-      (d.chekiDetails || []).forEach(c => addTo(view, 'cheki', g, c.name));
+      partsOf(d).forEach(p => {
+        addTo(view, 'costume', g, p.costume);
+        splitSongs(p.setlist).forEach(s => addTo(view, 'song', g, s));
+        p.chekiDetails.forEach(c => addTo(view, 'cheki', g, c.name));
+      });
       (d.members || []).forEach(m => addTo(view, 'member', g, m));
     });
     buildLineups();
   }
+
+  // ================= ステージ・部 =================
+  // ライブ1件に複数のステージ（部）があるときは d.parts に入れる。1つだけなら従来どおり上の項目に入れる
+  const emptyPart = () => ({ label: '', costume: '', setlist: '', chekiDetails: [], chekiTweets: [] });
+  function partsOf(d) {
+    if (d && Array.isArray(d.parts) && d.parts.length) return d.parts.map(p => ({ label: p.label || '', costume: p.costume || '', setlist: p.setlist || '', chekiDetails: p.chekiDetails || [], chekiTweets: p.chekiTweets || [] }));
+    return [{ label: '', costume: d?.costume || '', setlist: d?.setlist || '', chekiDetails: d?.chekiDetails || [], chekiTweets: d?.chekiTweets || [] }];
+  }
+  const isMulti = d => Array.isArray(d.parts) && d.parts.length > 1;
+  const partName = (p, i) => p.label || `ステージ${i + 1}`;
+  // ステージの配列からライブを作り直す（上の項目は全ステージの合計を入れておく）
+  function withParts(d, parts) {
+    parts = parts.map(p => ({ label: (p.label || '').trim(), costume: (p.costume || '').trim(), setlist: splitSongs(p.setlist).join('\n'), chekiDetails: p.chekiDetails || [], chekiTweets: p.chekiTweets || [] }));
+    const { parts: _old, ...rest } = d;
+    if (parts.length <= 1) {
+      const p = parts[0] || emptyPart();
+      return { ...rest, costume: p.costume, setlist: p.setlist, chekiDetails: p.chekiDetails, chekiTweets: p.chekiTweets };
+    }
+    const cheki = [];
+    parts.forEach(p => p.chekiDetails.forEach(c => { const ex = cheki.find(x => x.name === c.name); if (ex) ex.count += c.count; else cheki.push({ name: c.name, count: c.count }); }));
+    return { ...rest, parts, costume: parts.map(p => p.costume).filter(Boolean)[0] || '', setlist: parts.map(p => p.setlist).filter(Boolean).join('\n'),
+      chekiDetails: cheki, chekiTweets: parts.flatMap(p => p.chekiTweets) };
+  }
+
+  // ================= 記録の種類（ライブ／チェキ会のみ／オンラインチェキ） =================
+  const KIND_LABEL = { live: 'ライブ', cheki: 'チェキ会・特典会', online: 'オンラインチェキ' };
+  const kindOf = d => (d && d.kind) || 'live';
+  const isLive = d => kindOf(d) === 'live';
+  const chekiSum = d => partsOf(d).reduce((n, p) => n + p.chekiDetails.reduce((m, c) => m + (parseInt(c.count, 10) || 0), 0), 0);
 
   // ================= 体制 =================
   // 体制は「グループ＋メンバー構成」で1つ。名前は「〇人体制（メンバー名、…）」
@@ -592,7 +677,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       if (!map.has(key)) map.set(key, { group: l.group, members: [...l.members], start: l.start || '', end: l.end || '', key, defined: true, first: '', last: '', count: 0 });
     });
     liveLineup = new Map();
-    liveData.forEach(d => {
+    liveData.filter(d => !d.kind || d.kind === 'live').forEach(d => {
       let key = d.lineup && map.has(d.lineup) ? d.lineup : '';
       if (!key && d.lineup) { // 候補から消された体制でもライブで使われていれば残す
         const [g, ms] = d.lineup.split('::');
@@ -1089,20 +1174,96 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   }
   $('addSongButton').addEventListener('click', () => addSong($('addSongInput').value));
 
+  // ----- 記録の種類の切り替え -----
+  const getKind = () => (document.querySelector('input[name="recKind"]:checked') || {}).value || 'live';
+  function setKind(k) { const r = document.querySelector(`input[name="recKind"][value="${k}"]`); if (r) r.checked = true; applyKind(); }
+  function applyKind() {
+    const k = getKind(), live = k === 'live';
+    document.querySelectorAll('#liveEntryForm .live-only').forEach(el => { el.hidden = !live; });
+    $('venueField').hidden = k === 'online';
+    $('nameLabel').textContent = live ? 'ライブ名' : k === 'cheki' ? 'イベント名（任意）' : '販売・企画の名前（任意）';
+    $('dateLabel').textContent = k === 'online' ? '日付（撮影日・購入日など）' : '日付';
+    $('costumeLabel').textContent = live ? '衣装' : '衣装（チェキの衣装・任意）';
+    $('kindHint').hidden = live;
+    $('kindHint').textContent = k === 'cheki' ? 'ライブはなく、チェキ会・特典会でチェキを撮ったときの記録です。日付・グループ・チェキ（相手と枚数）を入れて保存してください。セットリストは不要です。'
+      : k === 'online' ? '現地に行かずにオンラインで購入したチェキの記録です。日付・グループ・チェキ（相手と枚数）を入れて保存してください。' : '';
+    if (!live) $('partNow').hidden = true; else renderPartTabs();
+  }
+  document.querySelectorAll('input[name="recKind"]').forEach(r => r.addEventListener('change', async () => {
+    if (getKind() !== 'live' && formParts.length > 1) {
+      setKind('live');
+      return toast('ステージが2つ以上あるので切り替えられません。先にステージを1つにしてください', 'error');
+    }
+    applyKind();
+  }));
+
+  // ----- ステージ・部の切り替え -----
+  function savePartFromForm() {
+    formParts[activePart] = { label: $('partLabel').value.trim(), costume: F.costume.value.trim(), setlist: F.setlist.value,
+      chekiDetails: clone(currentCheki), chekiTweets: clone(currentChekiTweets) };
+  }
+  function loadPartToForm(i) {
+    activePart = Math.max(0, Math.min(i, formParts.length - 1));
+    const p = formParts[activePart];
+    $('partLabel').value = p.label || ''; F.costume.value = p.costume || ''; F.setlist.value = p.setlist || '';
+    currentCheki = clone(p.chekiDetails || []); currentChekiTweets = clone(p.chekiTweets || []);
+    renderCheki(); renderChekiTweets(); renderCostumePreview(); renderPartTabs();
+  }
+  function renderPartTabs() {
+    const multi = formParts.length > 1;
+    $('partTabs').hidden = !multi; $('partLabelRow').hidden = !multi; $('partHint').hidden = multi;
+    $('partTabs').innerHTML = formParts.map((p, i) => {
+      const label = i === activePart ? ($('partLabel').value.trim() || partName(p, i)) : partName(p, i);
+      const n = splitSongs(i === activePart ? F.setlist.value : p.setlist).length;
+      return `<button type="button" role="tab" data-part="${i}" aria-selected="${i === activePart}">${esc(label)}${n ? `（${n}曲）` : ''}</button>`;
+    }).join('');
+    const now = $('partNow');
+    now.hidden = !multi;
+    now.textContent = multi ? `▼ ここから下は「${$('partLabel').value.trim() || partName(formParts[activePart], activePart)}」の衣装・チェキ・セットリストです` : '';
+  }
+  $('partTabs').addEventListener('click', e => {
+    const b = e.target.closest('[data-part]');
+    if (!b || +b.dataset.part === activePart) return;
+    savePartFromForm(); loadPartToForm(+b.dataset.part);
+  });
+  $('partLabel').addEventListener('input', renderPartTabs);
+  F.setlist.addEventListener('input', () => { if (formParts.length > 1) renderPartTabs(); });
+  $('addPartBtn').addEventListener('click', () => {
+    savePartFromForm();
+    formParts.push(emptyPartSafe());
+    loadPartToForm(formParts.length - 1);
+    $('partLabel').focus();
+    toast('ステージを追加しました。ステージ名と、このステージの衣装・チェキ・セットリストを入力してください');
+  });
+  $('delPartBtn').addEventListener('click', async () => {
+    savePartFromForm();
+    const p = formParts[activePart];
+    const hasData = p.costume || splitSongs(p.setlist).length || p.chekiDetails.length || p.chekiTweets.length;
+    if (hasData && !await confirmBox(`「${partName(p, activePart)}」を削除しますか？このステージの衣装・チェキ・セットリストも消えます。`)) return;
+    formParts.splice(activePart, 1);
+    if (!formParts.length) formParts = [emptyPartSafe()];
+    loadPartToForm(Math.min(activePart, formParts.length - 1));
+  });
+
   // ================= 保存・編集 =================
   $('liveEntryForm').addEventListener('submit', async e => {
     e.preventDefault();
     if ($('memberInput').value.trim()) addMember($('memberInput').value);
     const old = editingId ? liveData.find(x => x.id === editingId) : null;
-    const entry = {
-      id: editingId || genId(),
-      date: F.date.value, liveName: F.name.value.trim(), liveType: F.type.value.trim(),
-      venue: F.venue.value.trim(), group: F.group.value.trim(), members: [...currentMembers], lineup: currentLineup || '',
-      costume: F.costume.value.trim(), chekiDetails: clone(currentCheki), chekiTweets: clone(currentChekiTweets),
-      setlist: splitSongs(F.setlist.value).join('\n'), memo: F.memo.value.trim(),
+    savePartFromForm();
+    // 何も入っていないステージは捨てる
+    const parts = formParts.filter((p, i) => formParts.length === 1 || p.label || p.costume || splitSongs(p.setlist).length || p.chekiDetails.length || p.chekiTweets.length);
+    const kind = getKind(), live = kind === 'live';
+    const entry = withParts({
+      id: editingId || genId(), kind,
+      date: F.date.value, liveName: F.name.value.trim(), liveType: live ? F.type.value.trim() : '',
+      venue: kind === 'online' ? '' : F.venue.value.trim(), group: F.group.value.trim(),
+      members: live ? [...currentMembers] : [], lineup: live ? (currentLineup || '') : '',
+      memo: F.memo.value.trim(),
       createdAt: old?.createdAt || Date.now(), updatedAt: Date.now(),
-    };
-    const missing = [['日付', entry.date], ['グループ', entry.group], ['セットリスト', entry.setlist]]
+    }, parts.length ? parts : [emptyPartSafe()]);
+    if (!live) { entry.setlist = ''; delete entry.parts; }
+    const missing = [['日付', entry.date], ['グループ', entry.group], live ? ['セットリスト', entry.setlist] : ['チェキ（相手と枚数）', entry.chekiDetails.length]]
       .filter(([, v]) => !v).map(([k]) => k);
     if (missing.length) { toast(`${missing.join('・')}を入力してください`, 'error'); return; }
     const wasEdit = !!editingId;
@@ -1120,6 +1281,8 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     $('liveEntryForm').reset();
     currentCheki = []; currentMembers = []; currentLineup = ''; lineupManual = false; currentChekiTweets = []; renderChekiTweets();
     tweetAccount = ''; lastFetched = ''; currentHints = []; renderHints([]); $('parseResult').hidden = true; $('tweetUrl').value = ''; $('tweetText').value = '';
+    formParts = [emptyPartSafe()]; activePart = 0; renderPartTabs();
+    setKind('live');
     renderCheki(); refreshLineupSelect(false);
     editingId = null;
     $('submitButton').textContent = '保存する';
@@ -1131,15 +1294,15 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     const d = liveData.find(x => x.id === id);
     if (!d) return;
     F.date.value = d.date || ''; F.type.value = d.liveType || ''; F.name.value = d.liveName || '';
-    F.venue.value = d.venue || ''; F.group.value = d.group || ''; F.costume.value = d.costume || '';
-    F.setlist.value = d.setlist || ''; F.memo.value = d.memo || '';
-    currentCheki = clone(d.chekiDetails || []); currentMembers = [...(d.members || [])];
-    currentChekiTweets = clone(d.chekiTweets || []); renderChekiTweets();
+    F.venue.value = d.venue || ''; F.group.value = d.group || ''; F.memo.value = d.memo || '';
+    currentMembers = [...(d.members || [])];
+    formParts = clone(partsOf(d)); loadPartToForm(0);
+    setKind(kindOf(d));
     currentLineup = liveLineup.get(d.id) || ''; lineupManual = true;
     renderCheki(); refreshLineupSelect(false);
     editingId = id;
     $('submitButton').textContent = '更新する';
-    $('formTitle').textContent = `編集中: ${d.date} ${d.liveName || d.liveType}`;
+    $('formTitle').textContent = `編集中: ${d.date} ${d.liveName || d.liveType || KIND_LABEL[kindOf(d)]}`;
     $('cancelEditButton').hidden = false;
     showTab('entry');
     $('liveEntryForm').scrollIntoView({ behavior: 'smooth' });
@@ -1150,13 +1313,58 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     const has = (v, q) => !q || norm(v).includes(norm(q));
     return liveData.filter(d => (fYear === 'all' || (d.date || '').slice(0, 4) === fYear) && (fGroup === 'all' || (d.group || '').trim() === fGroup)
       && (fLineup === 'all' || liveLineup.get(d.id) === fLineup)
+      && (fKind === 'all' || kindOf(d) === fKind)
       && (fType === 'all' || (fType === '__none' ? !d.liveType : d.liveType === fType))
       && (!fFrom || (d.date || '') >= fFrom) && (!fTo || (d.date || '') <= fTo)
-      && has(d.venue, fVenue) && has(d.costume, fCostume)
-      && (!fSong || splitSongs(d.setlist).some(x => has(x, fSong)))
+      && has(d.venue, fVenue) && (!fCostume || partsOf(d).some(p => has(p.costume, fCostume)))
+      && (!fSong || partsOf(d).some(p => splitSongs(p.setlist).some(x => has(x, fSong))))
       && (!fMember || (d.members || []).some(x => has(x, fMember))));
   }
+  // 1ステージ分の表示（衣装・写真・チェキ・チェキツイート・セトリ）
+  function partHTML(d, p, deleted, withCostume) {
+    const songs = splitSongs(p.setlist);
+    const cheki = p.chekiDetails.map(c => `${esc(c.name)}×${c.count}`).join('、');
+    const pics = p.costume ? imgsOf(d.group, p.costume) : [];
+    return `${withCostume ? `<span class="sub">衣装: ${esc(p.costume || '未記録')}</span>` : ''}
+        ${pics.length && !deleted ? `<div class="thumbs">${pics.slice(0, 4).map(x => thumbTag(x, 'sm')).join('')}</div>` : ''}
+        ${cheki ? `<span class="sub">チェキ: ${cheki}</span>` : ''}
+        ${!deleted && p.chekiTweets.length ? `<details class="tweets"><summary>チェキツイート（${p.chekiTweets.length}件）</summary><div class="tweet-embeds">${p.chekiTweets.map(t => `<a href="${esc(t.url)}" target="_blank" rel="noopener" data-tweet="${esc(tweetId(t.url))}">${esc(t.text ? (t.text.length > 60 ? t.text.slice(0, 60) + '…' : t.text) : t.url)}</a>`).join('')}</div></details>` : ''}
+        ${deleted ? '' : `<details><summary>セットリスト（${songs.length}曲）</summary><ol>${songs.map(s => `<li>${esc(s)}</li>`).join('')}</ol></details>`}`;
+  }
   function liveCard(d, deleted) {
+    if (isMulti(d)) {
+      const ps = partsOf(d);
+      const btns = deleted
+        ? `<button class="btn sm" data-act="restore" data-id="${esc(d.id)}">復元</button><button class="btn sm danger" data-act="purge" data-id="${esc(d.id)}">完全に削除</button>`
+        : `<button class="btn sm" data-act="edit" data-id="${esc(d.id)}">編集</button><button class="btn sm" data-act="copy" data-id="${esc(d.id)}">コピー</button><button class="btn sm" data-act="split" data-id="${esc(d.id)}">ステージごとに分ける</button><button class="btn sm danger" data-act="delete" data-id="${esc(d.id)}">削除</button>`;
+      return `<article class="live">
+      <div class="meta">
+        <span class="date">${esc(d.date)}</span>
+        <span class="name">${esc(d.liveName || d.liveType || 'ライブ')}</span>
+        <span class="sub">${d.liveType ? `<span class="tag">${esc(d.liveType)}</span>` : ''}<span class="tag parts">${ps.length}ステージ</span><b>${esc(d.group || '—')}</b> ／ ${esc(d.venue || '会場未記録')}</span>
+        ${memberLine(d)}
+        ${ps.map((p, i) => `<div class="part-block"><span class="plabel">${esc(partName(p, i))}${p.costume ? `<span class="note" style="font-weight:400;color:var(--muted)"> ／ 衣装: ${esc(p.costume)}</span>` : ''}</span>${partHTML(d, p, deleted, false)}</div>`).join('')}
+        ${d.memo && !deleted ? `<div class="memo">${esc(d.memo)}</div>` : ''}
+      </div>
+      <div class="btns">${btns}</div>
+    </article>`;
+    }
+    if (!isLive(d)) {
+      const k = kindOf(d), cheki = (d.chekiDetails || []).map(c => `${esc(c.name)}×${c.count}`).join('、');
+      const btns = deleted
+        ? `<button class="btn sm" data-act="restore" data-id="${esc(d.id)}">復元</button><button class="btn sm danger" data-act="purge" data-id="${esc(d.id)}">完全に削除</button>`
+        : `<button class="btn sm" data-act="edit" data-id="${esc(d.id)}">編集</button><button class="btn sm" data-act="copy" data-id="${esc(d.id)}">コピー</button><button class="btn sm danger" data-act="delete" data-id="${esc(d.id)}">削除</button>`;
+      return `<article class="live">
+      <div class="meta">
+        <span class="date">${esc(d.date)}</span>
+        <span class="name">${esc(d.liveName || KIND_LABEL[k])}</span>
+        <span class="sub"><span class="tag kind-${k}">${KIND_LABEL[k]}</span><b>${esc(d.group || '—')}</b>${k === 'cheki' && d.venue ? ` ／ ${esc(d.venue)}` : ''}${d.costume ? ` ／ 衣装: ${esc(d.costume)}` : ''} ／ チェキ ${chekiSum(d)}枚</span>
+        ${partHTML(d, partsOf(d)[0], deleted, false).replace(/<details><summary>セットリスト[\s\S]*?<\/details>/, '')}
+        ${d.memo && !deleted ? `<div class="memo">${esc(d.memo)}</div>` : ''}
+      </div>
+      <div class="btns">${btns}</div>
+    </article>`;
+    }
     const songs = splitSongs(d.setlist);
     const cheki = (d.chekiDetails || []).map(c => `${esc(c.name)}×${c.count}`).join('、');
     const btns = deleted
@@ -1191,8 +1399,16 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     $('liveDataList').innerHTML = list.length ? list.map(d => liveCard(d, false)).join('')
       : `<div class="panel"><p class="empty">${liveData.length ? '条件に合うライブがありません。' : 'まだライブが記録されていません。「記録する」タブでセトリツイートを貼り付けるか、フォームから1件目を登録してください。'}</p></div>`;
     $('deletedLiveDataList').innerHTML = deletedLiveData.length ? deletedLiveData.map(d => liveCard(d, true)).join('') : '<p class="empty">削除したライブはありません。</p>';
-    $('liveCount').textContent = list.length;
-    $('totalSongsCount').textContent = list.reduce((n, d) => n + splitSongs(d.setlist).length, 0);
+    const lives = list.filter(isLive);
+    $('liveCount').textContent = lives.length;
+    const nCheki = list.filter(d => kindOf(d) === 'cheki').length, nOnline = list.filter(d => kindOf(d) === 'online').length;
+    $('chekiEvCount').textContent = nCheki; $('chekiEvStat').hidden = !nCheki;
+    $('onlineCount').textContent = nOnline; $('onlineStat').hidden = !nOnline;
+    $('chekiTotal').textContent = list.reduce((n, d) => n + chekiSum(d), 0);
+    $('totalSongsCount').textContent = list.reduce((n, d) => n + partsOf(d).reduce((m, p) => m + splitSongs(p.setlist).length, 0), 0);
+    const stages = lives.reduce((n, d) => n + partsOf(d).length, 0);
+    $('stageCount').textContent = stages; $('stageStat').hidden = stages === lives.length;
+    renderMergePanel();
   }
   document.addEventListener('click', async e => {
     const b = e.target.closest('button[data-act]');
@@ -1213,8 +1429,75 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       } else if (b.dataset.act === 'purge') {
         if (!await confirmBox('このライブを完全に削除しますか？元に戻せません。')) return;
         Store.purgeLive(id); toast('完全に削除しました');
+      } else if (b.dataset.act === 'split') {
+        const ps = partsOf(d);
+        if (!await confirmBox(`「${d.liveName || 'このライブ'}」を${ps.length}つのライブ（${ps.map(partName).join('／')}）に分けますか？`)) return;
+        if (editingId === id) resetForm();
+        ps.forEach((p, i) => {
+          const base = { ...d, id: i === 0 ? d.id : genId(), liveName: [d.liveName, partName(p, i)].filter(Boolean).join(' '), createdAt: (d.createdAt || Date.now()) + i, updatedAt: Date.now() };
+          Store.putLive(withParts(base, [p]));
+        });
+        toast(`${ps.length}つのライブに分けました`);
       }
     } catch (err) { writeError(err); }
+  });
+  // ----- 同じ日のライブをまとめる -----
+  function commonPrefix(arr) {
+    if (!arr.length) return '';
+    let pre = arr[0];
+    arr.forEach(s => { while (pre && !s.startsWith(pre)) pre = pre.slice(0, -1); });
+    return pre;
+  }
+  const trimJoin = s => s.replace(/[\s　\-－・:：|｜/／「『【(（]+$/, '').trim();
+  const trimHead = s => s.replace(/^[\s　\-－・:：|｜/／」』】)）]+/, '').trim();
+  function planMerge(lives) {
+    const L = [...lives].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+    const names = L.map(d => d.liveName || ''), venues = L.map(d => d.venue || '');
+    const same = a => a.every(x => x === a[0]);
+    let name = same(names) ? names[0] : trimJoin(commonPrefix(names));
+    let venue = same(venues) ? venues[0] : trimJoin(commonPrefix(venues));
+    if (!same(venues) && venue.length < 2) venue = venues.find(Boolean) || '';
+    const labels = L.map((d, i) => {
+      const parts = [];
+      if (!same(venues) && venue && (d.venue || '').startsWith(venue)) parts.push(trimHead(d.venue.slice(venue.length)));
+      else if (!same(venues)) parts.push(d.venue || '');
+      if (!same(names)) parts.push(name && names[i].startsWith(name) ? trimHead(names[i].slice(name.length)) : names[i]);
+      return parts.filter(Boolean).join(' ') || `${i + 1}回目`;
+    });
+    if (!name) name = names.find(Boolean) && same(names) ? names[0] : '';
+    const parts = [];
+    L.forEach((d, i) => partsOf(d).forEach((p, j) => parts.push({ ...p, label: p.label ? `${labels[i]} ${p.label}`.trim() : labels[i] })));
+    const memo = [...new Set(L.map(d => d.memo).filter(Boolean))].join('\n');
+    const first = L[0];
+    const merged = withParts({ ...first, liveName: name, venue, liveType: L.map(d => d.liveType).find(Boolean) || '', memo, updatedAt: Date.now() }, parts);
+    return { merged, others: L.slice(1), labels: parts.map(p => p.label) };
+  }
+  function mergeCandidates() {
+    const map = new Map();
+    liveData.filter(isLive).forEach(d => { const k = `${d.date}::${d.group}`; if (!map.has(k)) map.set(k, []); map.get(k).push(d); });
+    return [...map.values()].filter(a => a.length > 1).sort((a, b) => (b[0].date || '').localeCompare(a[0].date || ''));
+  }
+  function renderMergePanel() {
+    const sets = mergeCandidates();
+    $('mergePanel').hidden = !sets.length;
+    $('mergeTitle').textContent = `同じ日のライブをまとめる（${sets.length}組）`;
+    $('mergeList').innerHTML = sets.map(a => {
+      const plan = planMerge(a);
+      return `<div class="mrow"><span><b>${esc(a[0].date)}</b> ${esc(a[0].group)} ／ ${esc(plan.merged.liveName || '（ライブ名なし）')}<br><span class="hint">${a.length}件 → ${esc(plan.labels.join('／'))}</span></span>
+        <button type="button" class="btn sm primary" data-merge-ids="${esc(a.map(d => d.id).join(','))}">1つにまとめる</button></div>`;
+    }).join('');
+  }
+  $('mergeList').addEventListener('click', async e => {
+    const b = e.target.closest('[data-merge-ids]');
+    if (!b) return;
+    const lives = b.dataset.mergeIds.split(',').map(id => liveData.find(d => d.id === id)).filter(Boolean);
+    if (lives.length < 2) return;
+    const plan = planMerge(lives);
+    if (!await confirmBox(`${lives.length}件のライブを1つにまとめますか？\nライブ名: ${plan.merged.liveName || '（なし）'}\n会場: ${plan.merged.venue || '（なし）'}\nステージ: ${plan.labels.join('／')}\nまとめた後も「ステージごとに分ける」で元に戻せます。ステージ名は編集画面で直せます。`)) return;
+    if (editingId && lives.some(d => d.id === editingId)) resetForm();
+    Store.putLive(plan.merged);
+    plan.others.forEach(d => Store.purgeLive(d.id));
+    toast('1つのライブにまとめました');
   });
   const stripMeta = d => { const { id, deleted, deletedAt, createdAt, updatedAt, ...rest } = d; return rest; };
 
@@ -1233,10 +1516,11 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     $('typeFilter').innerHTML = '<option value="all">すべて</option>' + types.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('')
       + (liveData.some(d => !d.liveType) ? '<option value="__none">（未設定）</option>' : '');
     $('typeFilter').value = fType;
-    const conds = [fYear !== 'all' && `${fYear}年`, fGroup !== 'all' && fGroup, fLineup !== 'all' && lineupMap.get(fLineup)?.short,
+    $('kindFilter').value = fKind;
+    const conds = [fKind !== 'all' && KIND_LABEL[fKind], fYear !== 'all' && `${fYear}年`, fGroup !== 'all' && fGroup, fLineup !== 'all' && lineupMap.get(fLineup)?.short,
       fType !== 'all' && (fType === '__none' ? '種類未設定' : fType), (fFrom || fTo) && `${fmtDate(fFrom)}〜${fmtDate(fTo)}`,
       fSong && `曲「${fSong}」`, fVenue && `会場「${fVenue}」`, fCostume && `衣装「${fCostume}」`, fMember && `メンバー「${fMember}」`].filter(Boolean);
-    $('filterSummary').textContent = conds.length ? `条件: ${conds.join(' ／ ')}（${filtered().length}ライブ）` : `すべてのライブ（${liveData.length}件）`;
+    $('filterSummary').textContent = conds.length ? `条件: ${conds.join(' ／ ')}（${filtered().length}件）` : `すべてのライブ（${liveData.length}件）`;
     $('clearFilters').hidden = !conds.length;
     const ls = fGroup === 'all' ? [] : lineupsOfGroup(fGroup);
     if (fLineup !== 'all' && !ls.some(l => l.key === fLineup)) fLineup = 'all';
@@ -1248,6 +1532,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   $('yearFilter').addEventListener('change', e => { fYear = e.target.value; renderAll(); });
   $('groupFilter').addEventListener('change', e => { fGroup = e.target.value; fLineup = 'all'; renderAll(); });
   $('typeFilter').addEventListener('change', e => { fType = e.target.value; renderAll(); });
+  $('kindFilter').addEventListener('change', e => { fKind = e.target.value; renderAll(); });
   $('fromFilter').addEventListener('change', e => { fFrom = e.target.value; renderAll(); });
   $('toFilter').addEventListener('change', e => { fTo = e.target.value; renderAll(); });
   // 文字の絞り込み（部分一致・候補つき）。打ち終わってから反映
@@ -1266,7 +1551,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     $(id).addEventListener('change', apply);
   });
   $('clearFilters').addEventListener('click', () => {
-    fYear = fGroup = fLineup = fType = 'all'; fFrom = fTo = fSong = fVenue = fCostume = fMember = '';
+    fYear = fGroup = fLineup = fType = fKind = 'all'; fFrom = fTo = fSong = fVenue = fCostume = fMember = '';
     ['fromFilter', 'toFilter', ...Object.keys(textFilters)].forEach(id => { $(id).value = ''; });
     renderAll();
   });
@@ -1277,9 +1562,13 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     const venue = {}, costume = {}, songs = {}, cheki = {}, member = {}, lineup = {};
     const inc = (o, k, n = 1) => { k = String(k || '').trim(); if (k) o[k] = (o[k] || 0) + n; };
     filtered().forEach(d => {
-      inc(venue, d.venue); inc(costume, d.costume);
-      splitSongs(d.setlist).forEach(s => inc(songs, s));
-      (d.chekiDetails || []).forEach(c => inc(cheki, c.name, parseInt(c.count, 10) || 0));
+      const live = isLive(d);
+      if (live) inc(venue, d.venue);
+      partsOf(d).forEach(p => {
+        if (live) { inc(costume, p.costume); splitSongs(p.setlist).forEach(s => inc(songs, s)); }
+        p.chekiDetails.forEach(c => inc(cheki, c.name, parseInt(c.count, 10) || 0));
+      });
+      if (!live) return;
       (d.members || []).forEach(m => inc(member, m));
       const l = lineupMap.get(liveLineup.get(d.id));
       if (l) inc(lineup, fGroup === 'all' ? `${l.group} ${l.name}` : l.name);
@@ -1467,9 +1756,10 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       else if (k === 'venues') inc(d.venue);
       else if (k === 'liveTypes') inc(d.liveType);
       else if (d.group === g) {
-        if (k === 'song') new Set(splitSongs(d.setlist)).forEach(inc);
-        else if (k === 'costume') inc(d.costume);
-        else if (k === 'cheki') new Set((d.chekiDetails || []).map(c => c.name)).forEach(inc);
+        const ps = partsOf(d);
+        if (k === 'song') new Set(ps.flatMap(p => splitSongs(p.setlist))).forEach(inc);
+        else if (k === 'costume') new Set(ps.map(p => p.costume)).forEach(inc);
+        else if (k === 'cheki') new Set(ps.flatMap(p => p.chekiDetails.map(c => c.name))).forEach(inc);
       }
     });
     return m;
@@ -1527,19 +1817,26 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       } else if (k === 'venues' && F.has(d.venue)) n = { ...d, venue: to };
       else if (k === 'liveTypes' && F.has(d.liveType)) n = { ...d, liveType: to };
       else if (d.group === g) {
-        if (k === 'song') {
-          const songs = splitSongs(d.setlist);
-          if (songs.some(x => F.has(x))) n = { ...d, setlist: songs.map(x => F.has(x) ? to : x).join('\n') };
-        } else if (k === 'costume' && F.has(d.costume)) n = { ...d, costume: to };
-        else if (k === 'cheki' && (d.chekiDetails || []).some(c => F.has(c.name))) {
-          const merged = [];
-          (d.chekiDetails || []).forEach(c => {
-            const name = F.has(c.name) ? to : c.name;
-            const ex = merged.find(x => x.name === name);
-            if (ex) ex.count += c.count; else merged.push({ name, count: c.count });
-          });
-          n = { ...d, chekiDetails: merged };
-        }
+        // ステージごとに書き換える
+        let hit = false;
+        const ps = partsOf(d).map(p => {
+          const q = { ...p };
+          if (k === 'song') {
+            const songs = splitSongs(p.setlist);
+            if (songs.some(x => F.has(x))) { q.setlist = songs.map(x => F.has(x) ? to : x).join('\n'); hit = true; }
+          } else if (k === 'costume' && F.has(p.costume)) { q.costume = to; hit = true; }
+          else if (k === 'cheki' && p.chekiDetails.some(c => F.has(c.name))) {
+            const merged = [];
+            p.chekiDetails.forEach(c => {
+              const name = F.has(c.name) ? to : c.name;
+              const ex = merged.find(x => x.name === name);
+              if (ex) ex.count += c.count; else merged.push({ name, count: c.count });
+            });
+            q.chekiDetails = merged; hit = true;
+          }
+          return q;
+        });
+        if (hit) n = withParts(d, ps);
       }
       if (n) { Store.putLive(n); changed++; }
     });
@@ -1646,7 +1943,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       else arr = Array.isArray(p) ? p : [p];
     }
     catch (e) { return say('JSONとして読み取れませんでした。コピーした内容をそのまま貼り付けてください。'); }
-    const valid = arr.filter(d => d && d.date && typeof d.group === 'string' && d.group && d.setlist);
+    const valid = arr.filter(d => d && d.date && typeof d.group === 'string' && d.group && (d.setlist || (Array.isArray(d.parts) && d.parts.some(p => p.setlist)) || (d.kind && d.kind !== 'live' && (d.chekiDetails || []).length)));
     if (!valid.length) return say('取り込めるライブデータが見つかりませんでした。');
     let addedLineups = 0;
     lineupsIn.forEach(l => {
@@ -1956,7 +2253,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       currentMembers = [...new Set(r.members)]; renderMembers();
     } else refreshLineupSelect(true);
     if (r.songs.length) F.setlist.value = r.songs.join('\n');
-    renderHints(currentHints);
+    renderHints(currentHints); renderPartTabs(); renderCostumePreview();
     const url = $('tweetUrl').value.trim().split('?')[0];
     if (url && !F.memo.value.includes(url)) F.memo.value = (F.memo.value ? F.memo.value + '\n' : '') + '元ツイート: ' + url;
   }
@@ -2002,7 +2299,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
         $('tweetTextBox').open = true;
         return toast('本文を読み込めませんでした（非公開・削除済み、または通信エラー）。本文をコピーして貼り付けてください', 'error');
       }
-      if (!editingId && lastFetched && lastFetched !== url) { resetForm(); $('tweetUrl').value = url; } // 別のツイートを読み込むときは前の内容を消す
+      if (!editingId && formParts.length === 1 && lastFetched && lastFetched !== url) { resetForm(); $('tweetUrl').value = url; } // 別のツイートを読み込むときは前の内容を消す（ステージを追加中は消さない）
       lastFetched = url;
       tweetPostDate = info.date;
       const fromUrl = normAcc((url.match(/(?:x|twitter)\.com\/([^/]+)\/status/i) || [])[1]);
