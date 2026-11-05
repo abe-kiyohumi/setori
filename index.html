@@ -222,6 +222,7 @@ h4 { margin: 0; font-size: 0.88rem; color: var(--muted); letter-spacing: 0.03em;
 .stepper button { width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; font-size: 1.1rem; cursor: pointer; }
 .stepper input { width: 54px; text-align: center; padding: 6px 4px; font-variant-numeric: tabular-nums; }
 .bulk-save { position: sticky; bottom: calc(10px + env(safe-area-inset-bottom, 0px)); z-index: 15; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow); padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.rank li.rank-sep { border-bottom: 1px solid var(--line); padding-top: 14px; color: var(--muted); font-size: 0.8rem; font-weight: 700; letter-spacing: 0.05em; }
 /* 候補 */
 .cand { list-style: none; margin: 0; padding: 0; max-height: 220px; overflow-y: auto; }
 .cand li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--line); font-size: 0.92rem; }
@@ -629,7 +630,20 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   const norm = s => String(s ?? '').normalize('NFKC').toLowerCase()
     .replace(/[ァ-ヶ]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x60))
     .replace(/[\s　]+/g, '');
-  const splitSongs = s => String(s || '').split(/[\n,]/).map(x => x.trim()).filter(Boolean);
+  // カバー曲は「曲名(カバー)」にそろえる（「カバー(曲名)」「曲名（カバー）」なども同じ扱い）
+  function normSong(x) {
+    x = String(x || '').trim();
+    let m = x.match(/^[【\[［]?カバー[】\]］]?\s*[(（:：]\s*(.+?)\s*[)）]?$/);
+    if (m && m[1]) return `${m[1].trim()}(カバー)`;
+    m = x.match(/^[【\[［]カバー[】\]］]\s*(.+)$/);
+    if (m && m[1]) return `${m[1].trim()}(カバー)`;
+    m = x.match(/^(.+?)\s*[(（]\s*カバー\s*[)）]$/);
+    if (m && m[1]) return `${m[1].trim()}(カバー)`;
+    return x;
+  }
+  const isCover = x => /\(カバー\)$/.test(x);
+  const rawSongs = s => String(s || '').split(/[\n,]/).map(x => x.trim()).filter(Boolean);
+  const splitSongs = s => rawSongs(s).map(normSong);
   const sortJa = arr => [...arr].sort((a, b) => a.localeCompare(b, 'ja'));
   const pad = n => String(n).padStart(2, '0');
   const genId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -688,6 +702,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   // 保存済み候補 + ライブデータ中の項目 = 表示用候補
   function rebuildView() {
     view = candFromJSON(candToJSON(cand));
+    view.song.forEach((set, g) => view.song.set(g, new Set([...set].map(normSong))));
     liveData.forEach(d => {
       const g = (d.group || '').trim();
       if (g) view.groups.add(g);
@@ -1700,16 +1715,21 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       (fGroup === 'all' ? [...m.values()] : (m.has(fGroup) ? [m.get(fGroup)] : [])).forEach(set => set.forEach(v => { if (!(v in o)) o[v] = 0; }));
     };
     if (fType === 'all' && !fFrom && !fTo && !fSong && !fVenue && !fCostume && !fMember) { zeroFill(songs, 'song'); zeroFill(cheki, 'cheki'); zeroFill(member, 'member'); }
-    const draw = (id, o, unit, what, thumbOf) => {
-      const data = Object.entries(o).sort(([a, x], [b, y]) => y - x || a.localeCompare(b, 'ja'));
-      if (!data.length) { $(id).innerHTML = `<p class="empty">${what}のデータがまだありません。</p>`; return; }
-      let rank = 0, prev = null;
-      $(id).innerHTML = data.map(([item, n], i) => {
-        if (n !== prev) { rank = i + 1; prev = n; }
-        return `<li><span class="no${rank <= 3 && n > 0 ? ' top' : ''}">${rank}</span><span class="item">${thumbOf ? (thumbOf(item) || '') : ''}${esc(item)}</span><span class="n">${n}${unit}</span></li>`;
-      }).join('');
+    const draw = (id, o, unit, what, thumbOf, coverLast) => {
+      const all = Object.entries(o).sort(([a, x], [b, y]) => y - x || a.localeCompare(b, 'ja'));
+      if (!all.length) { $(id).innerHTML = `<p class="empty">${what}のデータがまだありません。</p>`; return; }
+      const block = data => {
+        let rank = 0, prev = null;
+        return data.map(([item, n], i) => {
+          if (n !== prev) { rank = i + 1; prev = n; }
+          return `<li><span class="no${rank <= 3 && n > 0 ? ' top' : ''}">${rank}</span><span class="item">${thumbOf ? (thumbOf(item) || '') : ''}${esc(item)}</span><span class="n">${n}${unit}</span></li>`;
+        }).join('');
+      };
+      if (!coverLast) { $(id).innerHTML = block(all); return; }
+      const orig = all.filter(([k]) => !isCover(k)), cov = all.filter(([k]) => isCover(k));
+      $(id).innerHTML = block(orig) + (cov.length ? `<li class="rank-sep"><span></span><span class="item">カバー曲</span><span></span></li>` + block(cov) : '');
     };
-    draw('setlistRanking', songs, '回', '楽曲');
+    draw('setlistRanking', songs, '回', '楽曲', null, true);
     draw('venueRanking', venue, '回', '会場');
     draw('costumeRanking', costume, '回', '衣装', name => { const x = imgsByName(name, fGroup === 'all' ? '' : fGroup)[0]; return x ? thumbTag(x, 'xs') : ''; });
     draw('lineupRanking', lineup, '回', '体制');
@@ -1843,6 +1863,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       ${scoped ? `<select id="s-sel-${k}" class="field" aria-label="グループ"><option value="">グループを選択…</option></select>` : ''}
       <div class="row"><div class="grow"><input id="in-${k}" class="field" placeholder="新しい${label}"${scoped ? ' disabled' : ''}></div><button type="button" class="btn" data-add="${k}"${scoped ? ' disabled' : ''}>追加</button></div>
       <input id="q-${k}" class="field" placeholder="🔍 一覧を絞り込む（文字の一部）"${scoped ? ' disabled' : ''}>
+      <div id="fix-${k}"></div>
       <div id="dup-${k}"></div>
       <ul id="list-${k}" class="cand"></ul></div>`;
   $('globalManage').innerHTML = Object.entries(GLOBAL).map(([k, l]) => panelHTML(k, l, false)).join('');
@@ -2003,6 +2024,28 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     });
     return m;
   }
+  // まだ「カバー(曲名)」などの書き方で保存されている記録を数える
+  function coverFixTargets() {
+    const lives = [...liveData, ...deletedLiveData].filter(d => partsOf(d).some(p => rawSongs(p.setlist).some(x => normSong(x) !== x)));
+    let candN = 0;
+    cand.song.forEach(set => set.forEach(x => { if (normSong(x) !== x) candN++; }));
+    return { lives, candN };
+  }
+  function renderCoverFix() {
+    const { lives, candN } = coverFixTargets();
+    $('fix-song').innerHTML = lives.length || candN ? `<div class="dupbox"><b>カバー曲の書き方がそろっていない記録があります（ライブ${lives.length}件${candN ? `・候補${candN}件` : ''}）。</b>
+      <span>「カバー(曲名)」「曲名（カバー）」などを「曲名(カバー)」にそろえて保存し直します。画面の表示とランキングは、押す前からそろえた名前で数えています。</span>
+      <div><button type="button" class="btn sm primary" id="coverFixBtn">「曲名(カバー)」にそろえる</button></div></div>` : '';
+  }
+  $('tab-manage').addEventListener('click', async e => {
+    if (!e.target.closest('#coverFixBtn')) return;
+    const { lives, candN } = coverFixTargets();
+    if (!await confirmBox(`カバー曲の書き方を「曲名(カバー)」にそろえますか？\nライブ${lives.length}件${candN ? `と候補${candN}件` : ''}を書き換えます。`)) return;
+    lives.forEach(d => Store.putLive(withParts({ ...d, updatedAt: Date.now() }, partsOf(d)))); // withParts の中で曲名がそろう
+    cand.song.forEach((set, g) => cand.song.set(g, new Set([...set].map(normSong))));
+    Store.saveCandidates();
+    toast(`カバー曲の書き方をそろえました（ライブ${lives.length}件）`);
+  });
   function renderCandPanel(k) {
     const g = scopeGroup(k), scoped = isScoped(k);
     if (scoped) {
@@ -2021,6 +2064,8 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     const q = $('q-' + k).value.trim();
     let list = items.filter(v => !q || norm(v).includes(norm(q)) || loose(v).includes(loose(q)));
     if (k !== 'song') list = sortJa(list);
+    else list = [...list.filter(v => !isCover(v)), ...list.filter(isCover)];
+    if (k === 'song') renderCoverFix();
     $('list-' + k).innerHTML = !items.length ? '<p class="empty">まだありません</p>'
       : !list.length ? '<p class="empty">条件に合う候補はありません</p>'
       : list.map(v => editing && editing.k === k && editing.value === v
@@ -2390,7 +2435,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
         if (c) { r.songs.push(c); used.add(i); }
       });
     }
-    r.songs = r.songs.filter(s => !NOT_SONG.test(s));
+    r.songs = r.songs.filter(s => !NOT_SONG.test(s)).map(normSong);
     r.newSongs = r.songs.filter(s => !knownSongs.some(k => norm(k) === norm(s)));
 
     // 7) ライブ名・種類
