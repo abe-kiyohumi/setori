@@ -223,6 +223,20 @@ h4 { margin: 0; font-size: 0.88rem; color: var(--muted); letter-spacing: 0.03em;
 .stepper input { width: 54px; text-align: center; padding: 6px 4px; font-variant-numeric: tabular-nums; }
 .bulk-save { position: sticky; bottom: calc(10px + env(safe-area-inset-bottom, 0px)); z-index: 15; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow); padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
 .rank li.rank-sep { border-bottom: 1px solid var(--line); padding-top: 14px; color: var(--muted); font-size: 0.8rem; font-weight: 700; letter-spacing: 0.05em; }
+/* まとめて編集 */
+.pick { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--accent); font-weight: 700; cursor: pointer; margin-bottom: 2px; }
+.pick input { width: 20px; height: 20px; accent-color: var(--accent); margin: 0; }
+.live.picked { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+#bulkEdit { border-color: var(--accent); }
+/* 自分の記録／グループ全体 */
+.scopebar { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; background: var(--surface-2); gap: 2px; align-self: flex-start; }
+.scopebar button { border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 0.88rem; font-weight: 500; padding: 5px 14px; border-radius: 999px; cursor: pointer; }
+.scopebar button[aria-pressed="true"] { background: var(--surface); color: var(--ink); font-weight: 700; box-shadow: 0 1px 3px rgba(0,0,0,0.12); }
+body.scope-all .top { box-shadow: inset 0 -3px 0 var(--warn-soft); }
+.tag.att { background: var(--ok-soft); color: var(--ok); }
+.tag.noatt { background: var(--surface-2); color: var(--muted); }
+.attend { display: flex; gap: 8px; align-items: center; font-weight: 500; }
+.attend input { width: 20px; height: 20px; accent-color: var(--accent); margin: 0; }
 /* 候補 */
 .cand { list-style: none; margin: 0; padding: 0; max-height: 220px; overflow-y: auto; }
 .cand li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--line); font-size: 0.92rem; }
@@ -230,7 +244,7 @@ h4 { margin: 0; font-size: 0.88rem; color: var(--muted); letter-spacing: 0.03em;
 .cand li:last-child { border-bottom: 0; }
 
 /* トースト・モーダル */
-.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 50; max-width: min(92vw, 520px); padding: 10px 16px; border-radius: 10px; box-shadow: var(--shadow); font-size: 0.92rem; background: var(--ink); color: var(--bg); }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(84px + env(safe-area-inset-bottom, 0px)); z-index: 50; max-width: min(92vw, 520px); padding: 10px 16px; border-radius: 10px; box-shadow: var(--shadow); font-size: 0.92rem; background: var(--ink); color: var(--bg); }
 .toast.error { background: var(--danger); color: #fff; }
 .modal { position: fixed; inset: 0; z-index: 60; background: rgba(15, 8, 20, 0.55); display: flex; align-items: center; justify-content: center; padding: 16px; }
 .modal .box { background: var(--surface); border-radius: 12px; padding: 20px; width: 100%; max-width: 520px; display: flex; flex-direction: column; gap: 14px; box-shadow: var(--shadow); }
@@ -254,6 +268,10 @@ h4 { margin: 0; font-size: 0.88rem; color: var(--muted); letter-spacing: 0.03em;
         <span id="userName" class="hint"></span>
         <button type="button" id="authBtn" class="btn sm">ログイン</button>
       </div>
+    </div>
+    <div class="scopebar" role="group" aria-label="表示する記録">
+      <button type="button" data-scope="mine" aria-pressed="true">自分が行ったライブ</button>
+      <button type="button" data-scope="all" aria-pressed="false">グループ全体</button>
     </div>
     <nav class="tabs" role="tablist">
       <button role="tab" data-tab="entry" aria-selected="true">記録する</button>
@@ -317,6 +335,7 @@ h4 { margin: 0; font-size: 0.88rem; color: var(--muted); letter-spacing: 0.03em;
         <label><input type="radio" name="recKind" value="online"> オンラインチェキ</label>
       </div>
       <p id="kindHint" class="hint" hidden></p>
+      <label class="attend live-only" id="attendRow"><input type="checkbox" id="liveAttended" checked> このライブに行った（「自分が行ったライブ」に入ります）</label>
       <div class="grid2">
         <div><label class="lbl req" for="liveDate" id="dateLabel">日付</label><input type="date" id="liveDate" class="field"></div>
         <div class="live-only"><label class="lbl" for="liveType">ライブの種類</label><input id="liveType" class="field" placeholder="定期公演 / 対バン など"></div>
@@ -364,7 +383,7 @@ h4 { margin: 0; font-size: 0.88rem; color: var(--muted); letter-spacing: 0.03em;
       <div><label class="lbl" for="liveCostume" id="costumeLabel">衣装</label><input id="liveCostume" class="field" placeholder="一部を入力すると候補が出ます">
         <div id="costumePreview" class="thumbs" style="margin-top:6px"></div></div>
 
-      <div class="panel inset">
+      <div class="panel inset" id="chekiPanel">
         <h3 id="chekiHead">チェキ</h3>
         <div id="chekiChips" class="chips"></div>
         <div class="row">
@@ -408,7 +427,8 @@ h4 { margin: 0; font-size: 0.88rem; color: var(--muted); letter-spacing: 0.03em;
       <div><label class="lbl" for="yearFilter">年</label><select id="yearFilter" class="field"><option value="all">すべて</option></select></div>
       <div><label class="lbl" for="groupFilter">グループ</label><select id="groupFilter" class="field"><option value="all">すべて</option></select></div>
       <div class="lineup-filter" hidden><label class="lbl" for="lineupFilter">体制</label><select id="lineupFilter" class="field"><option value="all">すべて</option></select></div>
-      <div><label class="lbl" for="kindFilter">記録の種類</label><select id="kindFilter" class="field"><option value="all">すべて</option><option value="live">ライブ</option><option value="cheki">チェキ会・特典会のみ</option><option value="online">オンラインチェキ</option></select></div>
+      <div id="attFilterBox" hidden><label class="lbl" for="attFilter">参加</label><select id="attFilter" class="field"><option value="all">すべて</option><option value="yes">行ったライブ</option><option value="no">行っていないライブ</option></select></div>
+      <div id="kindFilterBox"><label class="lbl" for="kindFilter">記録の種類</label><select id="kindFilter" class="field"><option value="all">すべて</option><option value="live">ライブ</option><option value="cheki">チェキ会・特典会のみ</option><option value="online">オンラインチェキ</option></select></div>
       <div><label class="lbl" for="typeFilter">ライブの種類</label><select id="typeFilter" class="field"><option value="all">すべて</option></select></div>
     </div>
     <details id="moreFilters">
@@ -433,6 +453,7 @@ h4 { margin: 0; font-size: 0.88rem; color: var(--muted); letter-spacing: 0.03em;
       </div>
       <div class="stats">
         <span class="stat"><b id="liveCount">0</b>ライブ</span>
+        <span class="stat" id="attStat" hidden>うち<b id="attCount">0</b>行った</span>
         <span class="stat"><b id="totalSongsCount">0</b>曲（のべ）</span>
         <span class="stat" id="stageStat" hidden><b id="stageCount">0</b>ステージ</span>
         <span class="stat" id="chekiEvStat" hidden><b id="chekiEvCount">0</b>チェキ会</span>
@@ -442,7 +463,31 @@ h4 { margin: 0; font-size: 0.88rem; color: var(--muted); letter-spacing: 0.03em;
       <div class="actions">
         <button type="button" id="copyAllDataButton" class="btn">表示中のデータをコピー</button>
         <button type="button" id="pasteDataButton" class="btn">データを貼り付けて取り込む</button>
+        <button type="button" id="bulkToggle" class="btn">まとめて編集</button>
       </div>
+    </div>
+    <div id="bulkEdit" class="panel" hidden>
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <h3>まとめて編集（<span id="bulkCount">0</span>件を選択中）</h3>
+        <button type="button" id="bulkClose" class="btn sm">終わる</button>
+      </div>
+      <div class="row">
+        <button type="button" id="bulkAll" class="btn sm">表示中をすべて選択</button>
+        <button type="button" id="bulkNone" class="btn sm">選択をはずす</button>
+      </div>
+      <div class="grid2">
+        <div><label class="lbl" for="bulkField">変更する項目</label><select id="bulkField" class="field">
+          <option value="liveType">ライブの種類</option>
+          <option value="venue">会場</option>
+          <option value="liveName">ライブ名</option>
+          <option value="costume">衣装（すべてのステージ）</option>
+        </select></div>
+        <div><label class="lbl" for="bulkValue">新しい値</label><input id="bulkValue" class="field" placeholder="一部を入力すると候補が出ます（空にすると消します）"></div>
+      </div>
+      <label class="hint" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="bulkOnlyEmpty"> その項目が空欄のライブだけ変更する</label>
+      <div class="actions"><button type="button" id="bulkApply" class="btn primary">選択したライブに設定</button></div>
+      <div class="row" style="align-items:center"><span class="hint">参加:</span><button type="button" class="btn sm" data-bulk-att="yes">選択したライブを「行った」にする</button><button type="button" class="btn sm" data-bulk-att="no">「行っていない」にする</button></div>
+      <p class="hint">上の「絞り込み」で、例えば「ライブの種類:（未設定）」にしてから「表示中をすべて選択」すると、種類が空のライブにまとめて設定できます。</p>
     </div>
     <details id="mergePanel" class="panel inset" hidden>
       <summary style="cursor:pointer"><b id="mergeTitle">同じ日のライブをまとめる</b></summary>
@@ -450,6 +495,10 @@ h4 { margin: 0; font-size: 0.88rem; color: var(--muted); letter-spacing: 0.03em;
       <div id="mergeList" class="mergebox"></div>
     </details>
     <div id="liveDataList" class="lives"></div>
+    <div id="bulkBar" class="bulk-save" hidden>
+      <span id="bulkBarInfo"></span>
+      <span class="row"><button type="button" id="bulkBarTop" class="btn sm">設定欄へ</button><button type="button" id="bulkBarApply" class="btn primary">選択したライブに設定</button></span>
+    </div>
 
     <div class="panel inset deleted">
       <h2>最近削除したライブ</h2>
@@ -741,6 +790,25 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     return { ...rest, parts, costume: parts.map(p => p.costume).filter(Boolean)[0] || '', setlist: parts.map(p => p.setlist).filter(Boolean).join('\n'),
       chekiDetails: cheki, chekiTweets: parts.flatMap(p => p.chekiTweets) };
   }
+
+  // ================= 自分が行ったライブ／グループ全体 =================
+  // 1件のライブに「行った（attended）」の印を付ける。印がないものは「行った」とみなす（これまでの記録はすべて自分が行ったライブ）
+  const attended = d => d.attended !== false;
+  let scope = 'mine', fAtt = 'all';
+  try { if (localStorage.getItem('setori-scope') === 'all') scope = 'all'; } catch (e) { }
+  // 今の表示に入る記録か
+  const inScope = d => scope === 'mine' ? attended(d) : (!d.kind || d.kind === 'live');
+  function setScope(sc) {
+    scope = sc;
+    try { localStorage.setItem('setori-scope', sc); } catch (e) { }
+    document.querySelectorAll('[data-scope]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.scope === sc)));
+    document.body.classList.toggle('scope-all', sc === 'all');
+    $('attFilterBox').hidden = sc !== 'all'; $('kindFilterBox').hidden = sc === 'all';
+    if (sc === 'all') fKind = 'all'; else fAtt = 'all';
+    if (!editingId) { $('liveAttended').checked = sc === 'mine'; applyAttend(); }
+    renderAll();
+  }
+  document.querySelectorAll('[data-scope]').forEach(b => b.addEventListener('click', () => setScope(b.dataset.scope)));
 
   // ================= 記録の種類（ライブ／チェキ会のみ／オンラインチェキ） =================
   const KIND_LABEL = { live: 'ライブ', cheki: 'チェキ会・特典会', online: 'オンラインチェキ' };
@@ -1294,6 +1362,11 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   // ----- 記録の種類の切り替え -----
   const getKind = () => (document.querySelector('input[name="recKind"]:checked') || {}).value || 'live';
   function setKind(k) { const r = document.querySelector(`input[name="recKind"][value="${k}"]`); if (r) r.checked = true; applyKind(); }
+  function applyAttend() {
+    const live = getKind() === 'live', att = $('liveAttended').checked;
+    $('chekiPanel').hidden = live && !att;
+  }
+  $('liveAttended').addEventListener('change', applyAttend);
   function applyKind() {
     const k = getKind(), live = k === 'live';
     document.querySelectorAll('#liveEntryForm .live-only').forEach(el => { el.hidden = !live; });
@@ -1305,6 +1378,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     $('kindHint').textContent = k === 'cheki' ? 'ライブはなく、チェキ会・特典会でチェキを撮ったときの記録です。日付・グループ・チェキ（相手と枚数）を入れて保存してください。セットリストは不要です。'
       : k === 'online' ? '現地に行かずにオンラインで購入したチェキの記録です。日付・グループ・チェキ（相手と枚数）を入れて保存してください。' : '';
     if (!live) $('partNow').hidden = true; else renderPartTabs();
+    applyAttend();
   }
   document.querySelectorAll('input[name="recKind"]').forEach(r => r.addEventListener('change', async () => {
     if (getKind() !== 'live' && formParts.length > 1) {
@@ -1373,7 +1447,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     const parts = formParts.filter((p, i) => formParts.length === 1 || p.label || p.costume || splitSongs(p.setlist).length || p.chekiDetails.length || p.chekiTweets.length);
     const kind = getKind(), live = kind === 'live';
     const entry = withParts({
-      id: editingId || genId(), kind,
+      id: editingId || genId(), kind, attended: kind !== 'live' || $('liveAttended').checked,
       date: F.date.value, liveName: F.name.value.trim(), liveType: live ? F.type.value.trim() : '',
       venue: kind === 'online' ? '' : F.venue.value.trim(), group: F.group.value.trim(),
       members: live ? [...currentMembers] : [], lineup: live ? (currentLineup || '') : '',
@@ -1401,6 +1475,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     tweetAccount = ''; lastFetched = ''; currentHints = []; renderHints([]); $('parseResult').hidden = true; $('tweetUrl').value = ''; $('tweetText').value = '';
     formParts = [emptyPartSafe()]; activePart = 0; renderPartTabs();
     setKind('live');
+    $('liveAttended').checked = scope === 'mine'; applyAttend();
     renderCheki(); refreshLineupSelect(false);
     editingId = null;
     $('submitButton').textContent = '保存する';
@@ -1415,6 +1490,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     F.venue.value = d.venue || ''; F.group.value = d.group || ''; F.memo.value = d.memo || '';
     currentMembers = [...(d.members || [])];
     formParts = clone(partsOf(d)); loadPartToForm(0);
+    $('liveAttended').checked = attended(d);
     setKind(kindOf(d));
     currentLineup = liveLineup.get(d.id) || ''; lineupManual = true;
     renderCheki(); refreshLineupSelect(false);
@@ -1429,7 +1505,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   // ================= 一覧 =================
   function filtered() {
     const has = (v, q) => !q || norm(v).includes(norm(q));
-    return liveData.filter(d => (fYear === 'all' || (d.date || '').slice(0, 4) === fYear) && (fGroup === 'all' || (d.group || '').trim() === fGroup)
+    return liveData.filter(d => inScope(d) && (fAtt === 'all' || (fAtt === 'yes') === attended(d)) && (fYear === 'all' || (d.date || '').slice(0, 4) === fYear) && (fGroup === 'all' || (d.group || '').trim() === fGroup)
       && (fLineup === 'all' || liveLineup.get(d.id) === fLineup)
       && (fKind === 'all' || kindOf(d) === fKind)
       && (fType === 'all' || (fType === '__none' ? !d.liveType : d.liveType === fType))
@@ -1459,7 +1535,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       <div class="meta">
         <span class="date">${esc(d.date)}</span>
         <span class="name">${esc(d.liveName || d.liveType || 'ライブ')}</span>
-        <span class="sub">${d.liveType ? `<span class="tag">${esc(d.liveType)}</span>` : ''}<span class="tag parts">${ps.length}ステージ</span><b>${esc(d.group || '—')}</b> ／ ${esc(d.venue || '会場未記録')}</span>
+        <span class="sub">${scope === 'all' ? (attended(d) ? '<span class="tag att">行った</span>' : '<span class="tag noatt">行っていない</span>') : ''}${d.liveType ? `<span class="tag">${esc(d.liveType)}</span>` : ''}<span class="tag parts">${ps.length}ステージ</span><b>${esc(d.group || '—')}</b> ／ ${esc(d.venue || '会場未記録')}</span>
         ${memberLine(d)}
         ${ps.map((p, i) => `<div class="part-block"><span class="plabel">${esc(partName(p, i))}${p.costume ? `<span class="note" style="font-weight:400;color:var(--muted)"> ／ 衣装: ${esc(p.costume)}</span>` : ''}</span>${partHTML(d, p, deleted, false)}${deleted ? '' : `<div><button type="button" class="btn sm" data-act="cheki-part" data-id="${esc(d.id)}" data-part="${i}">＋このステージのチェキを追加</button></div>`}</div>`).join('')}
         ${d.memo && !deleted ? `<div class="memo">${esc(d.memo)}</div>` : ''}
@@ -1492,7 +1568,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       <div class="meta">
         <span class="date">${esc(d.date)}</span>
         <span class="name">${esc(d.liveName || d.liveType || 'ライブ')}</span>
-        <span class="sub">${d.liveType ? `<span class="tag">${esc(d.liveType)}</span>` : ''}<b>${esc(d.group || '—')}</b> ／ ${esc(d.venue || '会場未記録')} ／ 衣装: ${esc(d.costume || '未記録')}</span>
+        <span class="sub">${scope === 'all' ? (attended(d) ? '<span class="tag att">行った</span>' : '<span class="tag noatt">行っていない</span>') : ''}${d.liveType ? `<span class="tag">${esc(d.liveType)}</span>` : ''}<b>${esc(d.group || '—')}</b> ／ ${esc(d.venue || '会場未記録')} ／ 衣装: ${esc(d.costume || '未記録')}</span>
         ${d.costume && !deleted && imgsOf(d.group, d.costume).length ? `<div class="thumbs">${imgsOf(d.group, d.costume).slice(0, 4).map(x => thumbTag(x, 'sm')).join('')}</div>` : ''}
         ${memberLine(d)}
         ${cheki ? `<span class="sub">チェキ: ${cheki}</span>` : ''}
@@ -1512,13 +1588,83 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     }
     return ms.length ? `<span class="sub">メンバー: ${esc(ms.join('、'))}</span>` : '';
   }
+  // ----- まとめて編集 -----
+  let bulkMode = false;
+  const bulkSel = new Set();
+  const BULK_LABEL = { liveType: 'ライブの種類', venue: '会場', liveName: 'ライブ名', costume: '衣装' };
+  const withPick = (html, d) => !bulkMode ? html
+    : html.replace('<article class="live">', `<article class="live${bulkSel.has(d.id) ? ' picked' : ''}">`)
+      .replace('<div class="meta">', `<div class="meta"><label class="pick"><input type="checkbox" data-pick="${esc(d.id)}"${bulkSel.has(d.id) ? ' checked' : ''}> 選択</label>`);
+  function updateBulk() {
+    [...bulkSel].forEach(id => { if (!liveData.some(d => d.id === id)) bulkSel.delete(id); });
+    $('bulkCount').textContent = bulkSel.size;
+    $('bulkEdit').hidden = !bulkMode;
+    $('bulkToggle').textContent = bulkMode ? 'まとめて編集を終わる' : 'まとめて編集';
+    $('bulkBar').hidden = !bulkMode || !bulkSel.size;
+    $('bulkBarInfo').textContent = `${bulkSel.size}件を選択中 → ${BULK_LABEL[$('bulkField').value]}を「${$('bulkValue').value.trim() || '（空欄）'}」に`;
+  }
+  attachAutocomplete($('bulkValue'), () => {
+    const f = $('bulkField').value, g = fGroup === 'all' ? '' : fGroup;
+    return f === 'liveType' ? [...view.liveTypes] : f === 'venue' ? [...view.venues] : f === 'costume' ? gItems('costume', g)
+      : [...new Set(liveData.map(d => d.liveName).filter(Boolean))];
+  });
+  $('bulkField').addEventListener('change', () => { $('bulkValue').value = ''; updateBulk(); });
+  $('bulkValue').addEventListener('input', updateBulk);
+  $('bulkValue').addEventListener('change', updateBulk);
+  $('bulkBarTop').addEventListener('click', () => $('bulkEdit').scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  $('bulkBarApply').addEventListener('click', () => $('bulkApply').click());
+  $('bulkToggle').addEventListener('click', () => { bulkMode = !bulkMode; if (!bulkMode) bulkSel.clear(); renderList(); });
+  $('bulkClose').addEventListener('click', () => { bulkMode = false; bulkSel.clear(); renderList(); });
+  $('bulkAll').addEventListener('click', () => { filtered().forEach(d => bulkSel.add(d.id)); renderList(); });
+  $('bulkNone').addEventListener('click', () => { bulkSel.clear(); renderList(); });
+  $('liveDataList').addEventListener('change', e => {
+    const c = e.target.closest('[data-pick]');
+    if (!c) return;
+    if (c.checked) bulkSel.add(c.dataset.pick); else bulkSel.delete(c.dataset.pick);
+    c.closest('.live').classList.toggle('picked', c.checked);
+    updateBulk();
+  });
+  $('bulkEdit').addEventListener('click', async e => {
+    const b = e.target.closest('[data-bulk-att]');
+    if (!b) return;
+    const yes = b.dataset.bulkAtt === 'yes';
+    const targets = liveData.filter(d => bulkSel.has(d.id) && isLive(d) && attended(d) !== yes);
+    if (!targets.length) return toast('変更が必要なライブはありませんでした');
+    if (!await confirmBox(`${targets.length}件のライブを「${yes ? '行った' : '行っていない'}」にしますか？${yes ? '' : '\n「自分が行ったライブ」には表示されなくなります（チェキの記録は残ります）。'}`)) return;
+    targets.forEach(d => Store.putLive({ ...d, attended: yes, updatedAt: Date.now() }));
+    bulkSel.clear(); renderList();
+    toast(`${targets.length}件を「${yes ? '行った' : '行っていない'}」にしました`);
+  });
+  $('bulkApply').addEventListener('click', async () => {
+    const f = $('bulkField').value, v = $('bulkValue').value.trim(), onlyEmpty = $('bulkOnlyEmpty').checked;
+    if (!bulkSel.size) return toast('ライブを選んでください', 'error');
+    let targets = liveData.filter(d => bulkSel.has(d.id));
+    // ライブ以外（チェキ会・オンライン）には種類を付けない。オンラインには会場を付けない
+    const skipped = targets.filter(d => (f === 'liveType' && !isLive(d)) || (f === 'venue' && kindOf(d) === 'online'));
+    targets = targets.filter(d => !skipped.includes(d));
+    const cur = d => f === 'costume' ? partsOf(d).map(p => p.costume).filter(Boolean).join('／') : (d[f] || '');
+    if (onlyEmpty) targets = targets.filter(d => f === 'costume' ? partsOf(d).some(p => !p.costume) : !d[f]);
+    targets = targets.filter(d => f === 'costume' ? partsOf(d).some(p => p.costume !== v && (!onlyEmpty || !p.costume)) : cur(d) !== v);
+    if (!targets.length) return toast('変更が必要なライブはありませんでした');
+    const msg = v ? `${targets.length}件の${BULK_LABEL[f]}を「${v}」にしますか？` : `${targets.length}件の${BULK_LABEL[f]}を空欄にしますか？`;
+    if (!await confirmBox(msg + (skipped.length ? `\n（チェキ会・オンラインチェキの${skipped.length}件は対象外です）` : ''))) return;
+    targets.forEach(d => {
+      if (f === 'costume') Store.putLive(withParts({ ...d, updatedAt: Date.now() }, partsOf(d).map(p => (!onlyEmpty || !p.costume) ? { ...p, costume: v } : p)));
+      else Store.putLive({ ...d, [f]: v, updatedAt: Date.now() });
+    });
+    bulkSel.clear();
+    renderList();
+    toast(`${targets.length}件の${BULK_LABEL[f]}を${v ? `「${v}」に` : '空欄に'}しました`);
+  });
   function renderList() {
     const list = filtered().sort((a, b) => (sortOrder === 'desc' ? -1 : 1) * ((a.date || '').localeCompare(b.date || '') || (a.createdAt || 0) - (b.createdAt || 0)));
-    $('liveDataList').innerHTML = list.length ? list.map(d => liveCard(d, false)).join('')
-      : `<div class="panel"><p class="empty">${liveData.length ? '条件に合うライブがありません。' : 'まだライブが記録されていません。「記録する」タブでセトリツイートを貼り付けるか、フォームから1件目を登録してください。'}</p></div>`;
+    $('liveDataList').innerHTML = list.length ? list.map(d => withPick(liveCard(d, false), d)).join('')
+      : `<div class="panel"><p class="empty">${liveData.length ? (scope === 'mine' ? '条件に合うライブがありません。行っていないライブは上の「グループ全体」で表示されます。' : '条件に合うライブがありません。') : 'まだライブが記録されていません。「記録する」タブでセトリツイートを貼り付けるか、フォームから1件目を登録してください。'}</p></div>`;
     $('deletedLiveDataList').innerHTML = deletedLiveData.length ? deletedLiveData.map(d => liveCard(d, true)).join('') : '<p class="empty">削除したライブはありません。</p>';
     const lives = list.filter(isLive);
     $('liveCount').textContent = lives.length;
+    $('attStat').hidden = scope !== 'all'; $('attCount').textContent = lives.filter(attended).length;
+    updateBulk();
     const nCheki = list.filter(d => kindOf(d) === 'cheki').length, nOnline = list.filter(d => kindOf(d) === 'online').length;
     $('chekiEvCount').textContent = nCheki; $('chekiEvStat').hidden = !nCheki;
     $('onlineCount').textContent = nOnline; $('onlineStat').hidden = !nOnline;
@@ -1596,7 +1742,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   }
   function mergeCandidates() {
     const map = new Map();
-    liveData.filter(isLive).forEach(d => { const k = `${d.date}::${d.group}`; if (!map.has(k)) map.set(k, []); map.get(k).push(d); });
+    liveData.filter(d => isLive(d) && inScope(d)).forEach(d => { const k = `${d.date}::${d.group}::${attended(d)}`; if (!map.has(k)) map.set(k, []); map.get(k).push(d); });
     const ignore = new Set(cand.mergeIgnore || []);
     return [...map.values()].filter(a => a.length > 1 && !ignore.has(mergeKey(a))).sort((a, b) => (b[0].date || '').localeCompare(a[0].date || ''));
   }
@@ -1653,11 +1799,11 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     $('typeFilter').innerHTML = '<option value="all">すべて</option>' + types.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('')
       + (liveData.some(d => !d.liveType) ? '<option value="__none">（未設定）</option>' : '');
     $('typeFilter').value = fType;
-    $('kindFilter').value = fKind;
-    const conds = [fKind !== 'all' && KIND_LABEL[fKind], fYear !== 'all' && `${fYear}年`, fGroup !== 'all' && fGroup, fLineup !== 'all' && lineupMap.get(fLineup)?.short,
+    $('kindFilter').value = fKind; $('attFilter').value = fAtt;
+    const conds = [fAtt !== 'all' && (fAtt === 'yes' ? '行ったライブ' : '行っていないライブ'), fKind !== 'all' && KIND_LABEL[fKind], fYear !== 'all' && `${fYear}年`, fGroup !== 'all' && fGroup, fLineup !== 'all' && lineupMap.get(fLineup)?.short,
       fType !== 'all' && (fType === '__none' ? '種類未設定' : fType), (fFrom || fTo) && `${fmtDate(fFrom)}〜${fmtDate(fTo)}`,
       fSong && `曲「${fSong}」`, fVenue && `会場「${fVenue}」`, fCostume && `衣装「${fCostume}」`, fMember && `メンバー「${fMember}」`].filter(Boolean);
-    $('filterSummary').textContent = conds.length ? `条件: ${conds.join(' ／ ')}（${filtered().length}件）` : `すべてのライブ（${liveData.length}件）`;
+    $('filterSummary').textContent = (scope === 'all' ? '【グループ全体】' : '【自分が行ったライブ】') + (conds.length ? `条件: ${conds.join(' ／ ')}（${filtered().length}件）` : `すべて（${filtered().length}件）`);
     $('clearFilters').hidden = !conds.length;
     const ls = fGroup === 'all' ? [] : lineupsOfGroup(fGroup);
     if (fLineup !== 'all' && !ls.some(l => l.key === fLineup)) fLineup = 'all';
@@ -1670,6 +1816,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   $('groupFilter').addEventListener('change', e => { fGroup = e.target.value; fLineup = 'all'; renderAll(); });
   $('typeFilter').addEventListener('change', e => { fType = e.target.value; renderAll(); });
   $('kindFilter').addEventListener('change', e => { fKind = e.target.value; renderAll(); });
+  $('attFilter').addEventListener('change', e => { fAtt = e.target.value; renderAll(); });
   $('fromFilter').addEventListener('change', e => { fFrom = e.target.value; renderAll(); });
   $('toFilter').addEventListener('change', e => { fTo = e.target.value; renderAll(); });
   // 文字の絞り込み（部分一致・候補つき）。打ち終わってから反映
@@ -1688,7 +1835,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     $(id).addEventListener('change', apply);
   });
   $('clearFilters').addEventListener('click', () => {
-    fYear = fGroup = fLineup = fType = fKind = 'all'; fFrom = fTo = fSong = fVenue = fCostume = fMember = '';
+    fYear = fGroup = fLineup = fType = fKind = fAtt = 'all'; fFrom = fTo = fSong = fVenue = fCostume = fMember = '';
     ['fromFilter', 'toFilter', ...Object.keys(textFilters)].forEach(id => { $(id).value = ''; });
     renderAll();
   });
@@ -1763,7 +1910,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       return;
     }
     const show = $('bkShow').value, year = ySel.value, q = $('bkSearch').value.trim();
-    const all = liveData.filter(d => d.group === g).sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt || 0) - (a.createdAt || 0));
+    const all = liveData.filter(d => d.group === g && attended(d)).sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt || 0) - (a.createdAt || 0));
     const total = all.reduce((n, d) => n + partsOf(d).reduce((m, p) => m + countIn(p, person), 0), 0);
     let list = all.filter(d => year === 'all' || (d.date || '').startsWith(year));
     if (q) list = list.filter(d => norm(`${d.liveName} ${d.venue} ${d.liveType} ${partsOf(d).map(p => p.label).join(' ')}`).includes(norm(q)));
@@ -2711,6 +2858,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   }
 
   // 初期表示
+  setTimeout(() => setScope(scope), 0);
   renderMembers(); renderCheki();
   try { const t = localStorage.getItem('setori-tab'); if (t && $('tab-' + t)) showTab(t); } catch (e) { }
   renderAll();
