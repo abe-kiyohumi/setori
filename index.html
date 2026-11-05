@@ -207,6 +207,21 @@ h4 { margin: 0; font-size: 0.88rem; color: var(--muted); letter-spacing: 0.03em;
 .kindbar label:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); font-weight: 700; }
 .tag.kind-cheki { background: var(--ok-soft); color: var(--ok); }
 .tag.kind-online { background: var(--warn-soft); color: var(--warn); }
+/* チェキ一括入力 */
+.bulk-list { display: flex; flex-direction: column; }
+.bulk-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; padding: 8px 4px; border-bottom: 1px solid var(--line); }
+.bulk-row:last-child { border-bottom: 0; }
+.bulk-row .info { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.bulk-row .d { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 0.82rem; }
+.bulk-row .t { font-weight: 500; overflow-wrap: anywhere; }
+.bulk-row .s { font-size: 0.8rem; color: var(--muted); overflow-wrap: anywhere; }
+.bulk-row.child { padding-left: 22px; }
+.bulk-row.changed { background: var(--accent-soft); }
+.bulk-row.has .t::after { content: " ●"; color: var(--accent); font-size: 0.7rem; }
+.stepper { display: inline-flex; align-items: center; gap: 4px; }
+.stepper button { width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; font-size: 1.1rem; cursor: pointer; }
+.stepper input { width: 54px; text-align: center; padding: 6px 4px; font-variant-numeric: tabular-nums; }
+.bulk-save { position: sticky; bottom: calc(10px + env(safe-area-inset-bottom, 0px)); z-index: 15; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow); padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
 /* 候補 */
 .cand { list-style: none; margin: 0; padding: 0; max-height: 220px; overflow-y: auto; }
 .cand li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--line); font-size: 0.92rem; }
@@ -243,6 +258,7 @@ h4 { margin: 0; font-size: 0.88rem; color: var(--muted); letter-spacing: 0.03em;
       <button role="tab" data-tab="entry" aria-selected="true">記録する</button>
       <button role="tab" data-tab="list" aria-selected="false">ライブ一覧</button>
       <button role="tab" data-tab="ranking" aria-selected="false">ランキング</button>
+      <button role="tab" data-tab="cheki" aria-selected="false">チェキ一括</button>
       <button role="tab" data-tab="manage" aria-selected="false">候補の管理</button>
     </nav>
   </div>
@@ -454,6 +470,46 @@ h4 { margin: 0; font-size: 0.88rem; color: var(--muted); letter-spacing: 0.03em;
       <div class="panel"><h3>体制別ライブ数</h3><ol id="lineupRanking" class="rank"></ol></div>
       <div class="panel"><h3>メンバー出演</h3><ol id="memberRanking" class="rank"></ol></div>
       <div class="panel"><h3>チェキ相手</h3><ol id="chekiRanking" class="rank"></ol></div>
+    </div>
+  </section>
+
+  <!-- ========== チェキ一括入力 ========== -->
+  <section class="tab" id="tab-cheki" hidden>
+    <div class="panel">
+      <h2>チェキを人ごとにまとめて入力</h2>
+      <p class="hint">メンバーを選ぶと、そのグループのライブが並びます。撮ったライブに枚数を入れて「まとめて保存」を押してください。0にするとそのライブのチェキから外れます。</p>
+      <div class="grid2">
+        <div><label class="lbl" for="bkGroup">グループ</label><select id="bkGroup" class="field"><option value="">グループを選択…</option></select></div>
+        <div><label class="lbl" for="bkPerson">チェキ相手</label><input id="bkPerson" class="field" placeholder="名前の一部を入力すると候補が出ます"></div>
+        <div><label class="lbl" for="bkYear">年</label><select id="bkYear" class="field"><option value="all">すべて</option></select></div>
+        <div><label class="lbl" for="bkShow">表示するライブ</label><select id="bkShow" class="field">
+          <option value="appear">この人が出演したライブ</option>
+          <option value="all">すべてのライブ</option>
+          <option value="has">チェキを入力済みのライブだけ</option>
+        </select></div>
+      </div>
+      <p id="bkSummary" class="hint"></p>
+    </div>
+    <div id="bkBody" class="panel" hidden>
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <h3 id="bkTitle"></h3>
+        <input id="bkSearch" class="field" style="max-width:260px" placeholder="🔍 ライブ名・会場で絞り込む">
+      </div>
+      <div id="bkList" class="bulk-list"></div>
+    </div>
+    <div id="bkAddBox" class="panel inset" hidden>
+      <h3>ライブ以外のチェキを追加（チェキ会・特典会／オンラインチェキ）</h3>
+      <div class="grid2">
+        <div><label class="lbl" for="bkAddKind">種類</label><select id="bkAddKind" class="field"><option value="cheki">チェキ会・特典会</option><option value="online">オンラインチェキ</option></select></div>
+        <div><label class="lbl" for="bkAddDate">日付</label><input type="date" id="bkAddDate" class="field"></div>
+        <div><label class="lbl" for="bkAddName">名前（任意）</label><input id="bkAddName" class="field" placeholder="例: ハロウィンオンラインチェキ"></div>
+        <div><label class="lbl" for="bkAddCount">枚数</label><input type="number" id="bkAddCount" class="field" min="1" value="1"></div>
+      </div>
+      <div class="actions"><button type="button" id="bkAddBtn" class="btn">この人のチェキとして追加</button></div>
+    </div>
+    <div id="bkSaveBar" class="bulk-save" hidden>
+      <span id="bkSaveInfo"></span>
+      <span class="row"><button type="button" id="bkDiscard" class="btn sm">変更を取り消す</button><button type="button" id="bkSave" class="btn primary">まとめて保存</button></span>
     </div>
   </section>
 
@@ -1072,8 +1128,32 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   const tweetId = url => (String(url).match(TWEET_RE) || [])[1] || '';
   // X の公式埋め込み情報（本文）を取得。取れなくてもURLだけで保存できる
   async function fetchTweetText(url) { return (await fetchTweetInfo(url)).text; }
+  // ツイートの全文を取得する。Xの公式の埋め込み情報は「さらに表示」より後ろが切れるため、
+  // 全文を返してくれる公開サービス（FxTwitter → vxTwitter）を先に使い、だめなら公式の埋め込み情報を使う
+  async function fetchTweetInfo(url) {
+    const id = tweetId(url), user = ((url.match(/(?:x|twitter)\.com\/([^/]+)\/status/i) || [])[1] || 'i');
+    const ymd = sec => { const t = new Date(sec * 1000); return isNaN(t) ? '' : `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}`; };
+    const getJSON = async u => {
+      const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), 8000);
+      try { const r = await fetch(u, { signal: ctl.signal }); return r.ok ? await r.json() : null; } catch (e) { return null; } finally { clearTimeout(timer); }
+    };
+    if (id) {
+      const fx = await getJSON(`https://api.fxtwitter.com/${encodeURIComponent(user)}/status/${id}`);
+      const t = fx && fx.tweet;
+      if (t && (t.text || t.raw_text?.text)) {
+        return { text: cleanTweetText(t.text || t.raw_text.text), date: t.created_timestamp ? ymd(t.created_timestamp) : '', author: t.author?.name || '', authorUrl: t.author?.screen_name ? `https://x.com/${t.author.screen_name}` : '', source: 'fx' };
+      }
+      const vx = await getJSON(`https://api.vxtwitter.com/${encodeURIComponent(user)}/status/${id}`);
+      if (vx && vx.text) {
+        return { text: cleanTweetText(vx.text), date: vx.date_epoch ? ymd(vx.date_epoch) : '', author: vx.user_name || '', authorUrl: vx.user_screen_name ? `https://x.com/${vx.user_screen_name}` : '', source: 'vx' };
+      }
+    }
+    return fetchTweetOembed(url);
+  }
+  // 末尾の画像・リンクの短縮URL（t.co）を取り除く
+  const cleanTweetText = t => String(t || '').replace(/\s*https?:\/\/t\.co\/\S+/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').trim();
   // 本文と投稿日を取得（Xの公式の埋め込み情報を使う。非公開・削除済みは取れない）
-  function fetchTweetInfo(url) {
+  function fetchTweetOembed(url) {
     return new Promise(resolve => {
       const cb = '__tw' + Date.now() + Math.floor(Math.random() * 1000);
       const sc = document.createElement('script');
@@ -1636,6 +1716,123 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     draw('memberRanking', member, '回', 'メンバー');
     draw('chekiRanking', cheki, '枚', 'チェキ');
   }
+
+  // ================= チェキ一括入力（人ごと） =================
+  const bkEdits = new Map(); // "ライブID:ステージ番号" → 枚数（まだ保存していない変更）
+  const bkKey = (id, i) => `${id}:${i}`;
+  const bkGroup = () => $('bkGroup').value;
+  const bkPerson = () => $('bkPerson').value.trim();
+  // そのステージでのこの人の枚数（表記ゆれは同じ人として扱う）
+  const countIn = (p, name) => p.chekiDetails.filter(c => norm(c.name) === norm(name)).reduce((n, c) => n + (parseInt(c.count, 10) || 0), 0);
+  attachAutocomplete($('bkPerson'), () => [...new Set([...gItems('member', bkGroup()), ...gItems('cheki', bkGroup())])], {
+    onPick: v => { $('bkPerson').value = v; bkEdits.clear(); renderChekiBulk(); },
+  });
+  function renderChekiBulk() {
+    const groups = sortJa(view.groups), sel = $('bkGroup'), keep = sel.value;
+    sel.innerHTML = '<option value="">グループを選択…</option>' + groups.map(g => `<option value="${esc(g)}">${esc(g)}</option>`).join('');
+    sel.value = view.groups.has(keep) ? keep : (fGroup !== 'all' ? fGroup : '');
+    const g = sel.value, person = bkPerson();
+    const years = [...new Set(liveData.filter(d => d.group === g).map(d => (d.date || '').slice(0, 4)).filter(Boolean))].sort().reverse();
+    const ySel = $('bkYear'), yKeep = ySel.value;
+    ySel.innerHTML = '<option value="all">すべて</option>' + years.map(y => `<option value="${y}">${y}年</option>`).join('');
+    ySel.value = years.includes(yKeep) ? yKeep : 'all';
+    $('bkBody').hidden = $('bkAddBox').hidden = !(g && person);
+    if (!g || !person) {
+      $('bkSummary').textContent = !g ? 'グループを選んでください。' : 'チェキ相手の名前を入力して候補から選ぶか、Enterを押してください。';
+      $('bkSaveBar').hidden = true;
+      return;
+    }
+    const show = $('bkShow').value, year = ySel.value, q = $('bkSearch').value.trim();
+    const all = liveData.filter(d => d.group === g).sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt || 0) - (a.createdAt || 0));
+    const total = all.reduce((n, d) => n + partsOf(d).reduce((m, p) => m + countIn(p, person), 0), 0);
+    let list = all.filter(d => year === 'all' || (d.date || '').startsWith(year));
+    if (q) list = list.filter(d => norm(`${d.liveName} ${d.venue} ${d.liveType} ${partsOf(d).map(p => p.label).join(' ')}`).includes(norm(q)));
+    const anyMembers = list.some(d => (d.members || []).length);
+    if (show === 'appear' && anyMembers) list = list.filter(d => !isLive(d) || (d.members || []).some(m => norm(m) === norm(person)) || partsOf(d).some(p => countIn(p, person)));
+    if (show === 'has') list = list.filter(d => partsOf(d).some((p, i) => countIn(p, person) || bkEdits.has(bkKey(d.id, i))));
+    $('bkTitle').textContent = `${person}（${list.length}件）`;
+    $('bkSummary').textContent = `${person}とのチェキ: これまで合計 ${total}枚（${all.filter(d => partsOf(d).some(p => countIn(p, person))).length}回）`;
+    const stepper = (id, i, now) => {
+      const k = bkKey(id, i), v = bkEdits.has(k) ? bkEdits.get(k) : now;
+      return `<span class="stepper"><button type="button" data-bk-step="-1" data-k="${esc(k)}" aria-label="1枚減らす">−</button><input class="field" type="number" min="0" inputmode="numeric" value="${v}" data-bk-in="${esc(k)}" data-now="${now}" aria-label="枚数"><button type="button" data-bk-step="1" data-k="${esc(k)}" aria-label="1枚増やす">＋</button></span>`;
+    };
+    const rowCls = (k, now) => `bulk-row${bkEdits.has(k) && bkEdits.get(k) !== now ? ' changed' : ''}${now ? ' has' : ''}`;
+    $('bkList').innerHTML = list.length ? list.map(d => {
+      const ps = partsOf(d), kind = kindOf(d);
+      const title = d.liveName || (kind === 'live' ? d.liveType || 'ライブ' : KIND_LABEL[kind]);
+      const sub = [kind !== 'live' ? KIND_LABEL[kind] : d.liveType, d.venue].filter(Boolean).join(' ／ ');
+      if (ps.length <= 1) {
+        const now = countIn(ps[0], person), k = bkKey(d.id, 0);
+        return `<div class="${rowCls(k, now)}"><div class="info"><span class="d">${esc(d.date)}</span><span class="t">${esc(title)}</span>${sub ? `<span class="s">${esc(sub)}</span>` : ''}</div>${stepper(d.id, 0, now)}</div>`;
+      }
+      return `<div class="bulk-row"><div class="info"><span class="d">${esc(d.date)}</span><span class="t">${esc(title)}</span><span class="s">${esc(sub)}${sub ? ' ／ ' : ''}${ps.length}ステージ</span></div><span></span></div>`
+        + ps.map((p, i) => { const now = countIn(p, person), k = bkKey(d.id, i); return `<div class="${rowCls(k, now)} child"><div class="info"><span class="t">${esc(partName(p, i))}</span></div>${stepper(d.id, i, now)}</div>`; }).join('');
+    }).join('') : '<p class="empty">条件に合うライブがありません。「表示するライブ」を「すべてのライブ」にすると、出演メンバーが入っていないライブも出ます。</p>';
+    updateBkBar();
+  }
+  function updateBkBar() {
+    const changes = [...bkEdits.entries()].filter(([k, v]) => {
+      const [id, i] = k.split(':'); const d = liveData.find(x => x.id === id);
+      return d && v !== countIn(partsOf(d)[+i] || emptyPart(), bkPerson());
+    });
+    $('bkSaveBar').hidden = !changes.length;
+    $('bkSaveInfo').textContent = changes.length ? `未保存の変更 ${changes.length}件` : '';
+  }
+  function setBk(k, v, input) {
+    v = Math.max(0, Math.min(999, parseInt(v, 10) || 0));
+    bkEdits.set(k, v);
+    const inp = input || document.querySelector(`[data-bk-in="${CSS.escape(k)}"]`);
+    if (inp) { inp.value = v; inp.closest('.bulk-row').classList.toggle('changed', v !== +inp.dataset.now); }
+    updateBkBar();
+  }
+  $('bkList').addEventListener('click', e => {
+    const b = e.target.closest('[data-bk-step]');
+    if (!b) return;
+    const inp = document.querySelector(`[data-bk-in="${CSS.escape(b.dataset.k)}"]`);
+    setBk(b.dataset.k, (parseInt(inp.value, 10) || 0) + +b.dataset.bkStep, inp);
+  });
+  $('bkList').addEventListener('input', e => { const inp = e.target.closest('[data-bk-in]'); if (inp) setBk(inp.dataset.bkIn, inp.value, inp); });
+  $('bkList').addEventListener('focusin', e => { const inp = e.target.closest('[data-bk-in]'); if (inp) inp.select(); });
+  ['bkGroup', 'bkYear', 'bkShow'].forEach(id => $(id).addEventListener('change', () => { if (id === 'bkGroup') { bkEdits.clear(); $('bkPerson').value = ''; } renderChekiBulk(); }));
+  $('bkSearch').addEventListener('input', renderChekiBulk);
+  $('bkPerson').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) { bkEdits.clear(); renderChekiBulk(); } });
+  $('bkPerson').addEventListener('change', () => { bkEdits.clear(); renderChekiBulk(); });
+  $('bkDiscard').addEventListener('click', () => { bkEdits.clear(); renderChekiBulk(); toast('変更を取り消しました'); });
+  $('bkSave').addEventListener('click', () => {
+    const person = bkPerson();
+    const byLive = new Map();
+    bkEdits.forEach((v, k) => { const [id, i] = k.split(':'); if (!byLive.has(id)) byLive.set(id, new Map()); byLive.get(id).set(+i, v); });
+    let n = 0;
+    byLive.forEach((m, id) => {
+      const d = liveData.find(x => x.id === id);
+      if (!d) return;
+      let changed = false;
+      const ps = partsOf(d).map((p, i) => {
+        if (!m.has(i)) return p;
+        const v = m.get(i);
+        if (v === countIn(p, person)) return p;
+        changed = true;
+        // 同じ人（表記ゆれ含む）をまとめて、新しい枚数にする
+        const exist = p.chekiDetails.find(c => norm(c.name) === norm(person));
+        const rest = p.chekiDetails.filter(c => norm(c.name) !== norm(person));
+        return { ...p, chekiDetails: v ? [...rest, { name: exist ? exist.name : person, count: v }] : rest };
+      });
+      if (changed) { Store.putLive(withParts({ ...d, updatedAt: Date.now() }, ps)); n++; }
+    });
+    bkEdits.clear();
+    renderChekiBulk();
+    toast(n ? `${person}のチェキを${n}件のライブに保存しました` : '変更はありませんでした');
+  });
+  $('bkAddBtn').addEventListener('click', () => {
+    const person = bkPerson(), g = bkGroup(), date = $('bkAddDate').value, count = parseInt($('bkAddCount').value, 10);
+    if (!date) return toast('日付を入力してください', 'error');
+    if (!(count > 0)) return toast('枚数は1以上で入力してください', 'error');
+    const kind = $('bkAddKind').value;
+    Store.putLive(withParts({ id: genId(), kind, date, group: g, liveName: $('bkAddName').value.trim(), liveType: '', venue: '', members: [], lineup: '', memo: '', createdAt: Date.now(), updatedAt: Date.now() },
+      [{ label: '', costume: '', setlist: '', chekiDetails: [{ name: person, count }], chekiTweets: [] }]));
+    $('bkAddName').value = ''; $('bkAddCount').value = '1';
+    toast(`${KIND_LABEL[kind]}（${date}）を追加しました`);
+  });
 
   // ================= 候補の管理 =================
   const GLOBAL = { groups: 'グループ', venues: '会場', liveTypes: 'ライブの種類' };
@@ -2462,6 +2659,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     renderList();
     renderRankings();
     renderManage();
+    renderChekiBulk();
     refreshLineupSelect(false);
     renderCostumePreview();
     renderImgModal();
