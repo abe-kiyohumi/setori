@@ -256,6 +256,16 @@ body.scope-all .top { box-shadow: inset 0 -3px 0 var(--warn-soft); }
   .live .btns { flex-direction: row; }
   .live .btns .btn { flex: 1; }
 }
+  .tt-list { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+  .tt-item { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); cursor: pointer; }
+  .tt-item input { margin-top: 4px; }
+  .tt-item .tt-main { flex: 1; min-width: 0; }
+  .tt-item .tt-title { font-weight: 600; overflow-wrap: anywhere; }
+  .tt-item .tt-sub { font-size: .85em; color: var(--muted); overflow-wrap: anywhere; }
+  .tt-tag { display: inline-block; font-size: .75em; padding: 1px 6px; border-radius: 999px; background: var(--surface-2); color: var(--muted); margin-left: 4px; }
+  .tt-tag.done { background: var(--ok-soft); color: var(--ok); }
+  .tt-tag.warn { background: var(--warn-soft); color: var(--warn); }
+  #ttPanel > summary { cursor: pointer; list-style: revert; }
 </style>
 </head>
 <body class="signed-out">
@@ -308,16 +318,17 @@ body.scope-all .top { box-shadow: inset 0 -3px 0 var(--warn-soft); }
   <section class="tab" id="tab-entry">
     <div class="panel inset">
       <h2>Xのセトリツイートから読み込む</h2>
-      <p class="hint">ツイートのURLを貼ると、本文を読み込んで日付・会場・グループ・ライブ名と種類・体制・衣装・セットリストを下のフォームに入れます。うまく読み込めないときは、本文をコピーして下の欄に貼ってください。</p>
+      <p class="hint">ツイートのURLを貼ると、本文を読み込んで日付・会場・グループ・ライブ名と種類・体制・衣装・セットリストを下のフォームに入れます。告知ツイートとセトリのツイートなど、同じライブのツイートは何件でもまとめて貼れます（1行に1つ）。うまく読み込めないときは、本文をコピーして下の欄に貼ってください。</p>
       <div>
-        <label class="lbl" for="tweetUrl">ツイートのURL</label>
+        <label class="lbl" for="tweetUrl">ツイートのURL（複数可・1行に1つ）</label>
         <div class="row">
-          <div class="grow"><input id="tweetUrl" class="field" type="url" placeholder="https://x.com/…/status/…"></div>
+          <div class="grow"><textarea id="tweetUrl" class="field" rows="2" placeholder="https://x.com/…/status/…&#10;https://x.com/…/status/…"></textarea></div>
           <button type="button" id="fetchTweetBtn" class="btn primary">URLから読み込む</button>
         </div>
+        <div id="tweetLoaded" class="chips" style="margin-top:6px"></div>
       </div>
       <details id="tweetTextBox">
-        <summary class="hint" style="cursor:pointer">ツイート本文（貼り付け・確認用）</summary>
+        <summary class="hint" style="cursor:pointer">ツイート本文（貼り付け・確認用。複数のツイートは「---」だけの行で区切ります）</summary>
         <textarea id="tweetText" class="field" rows="7" style="margin-top:8px" placeholder="【セトリ】10/18(土) 定期公演 vol.12&#10;@渋谷CYCLONE&#10;M1 曲A&#10;M2 曲B&#10;EN 曲C&#10;#なみだ色の消しごむ"></textarea>
       </details>
       <div class="actions">
@@ -326,6 +337,26 @@ body.scope-all .top { box-shadow: inset 0 -3px 0 var(--warn-soft); }
       </div>
       <div id="parseResult" class="result panel" hidden></div>
     </div>
+
+    <details class="panel inset" id="ttPanel">
+      <summary><h2 style="display:inline">TimeTreeのスケジュールから取り込む</h2></summary>
+      <p class="hint">グループ公式のTimeTreeカレンダーからライブの予定を読み込み、選んだものを「グループ全体」のライブ（行っていない扱い）として保存します。行ったライブは、保存後に一覧の「行った」で切り替えられます。TimeTreeの仕組み上、読めるのは<b>約12週間前〜約6週間先</b>の予定です。</p>
+      <div class="row" style="flex-wrap:wrap">
+        <div class="grow"><label class="lbl" for="ttGroup">グループ</label><select id="ttGroup" class="field"></select></div>
+        <button type="button" id="ttLoad" class="btn primary" style="align-self:flex-end">予定を読み込む</button>
+      </div>
+      <p id="ttMsg" class="hint"></p>
+      <div id="ttList" class="tt-list"></div>
+      <div class="actions" id="ttActions" hidden>
+        <label class="hint"><input type="checkbox" id="ttAttended"> 行ったライブとして取り込む</label>
+        <button type="button" id="ttImport" class="btn primary">選んだ予定を取り込む</button>
+      </div>
+      <details style="margin-top:10px">
+        <summary class="hint" style="cursor:pointer">中継サーバーの設定</summary>
+        <p class="hint">TimeTreeはほかのサイトから直接読めないため、中継サーバー（Cloudflare Workers）を通して読み込みます。作成したWorkerのURL（https://….workers.dev）を入れてください。</p>
+        <div class="row"><div class="grow"><input id="ttWorker" class="field" placeholder="https://setori-timetree.○○.workers.dev"></div><button type="button" id="ttWorkerSave" class="btn">保存</button></div>
+      </details>
+    </details>
 
     <form id="liveEntryForm" class="panel" autocomplete="off">
       <h2 id="formTitle">ライブを記録</h2>
@@ -582,6 +613,12 @@ body.scope-all .top { box-shadow: inset 0 -3px 0 var(--warn-soft); }
           <div class="row"><div class="grow"><input id="lmAccountIn" class="field" placeholder="@アカウント名"></div><button type="button" id="lmAccountAdd" class="btn">追加</button></div>
         </div>
         <div class="panel inset">
+          <h3>TimeTreeカレンダー</h3>
+          <p class="hint">グループ公式のTimeTree公開カレンダーのURL（https://timetr.ee/p/… ）を登録すると、「記録する」タブからライブ予定を取り込めます。</p>
+          <div id="lmCals" class="chips"></div>
+          <div class="row"><div class="grow"><input id="lmCalIn" class="field" placeholder="https://timetr.ee/p/…"></div><button type="button" id="lmCalAdd" class="btn">追加</button></div>
+        </div>
+        <div class="panel inset">
           <h3>体制</h3>
           <div id="lmLineups" style="display:flex;flex-direction:column;gap:10px"></div>
         </div>
@@ -719,7 +756,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   let liveLineup = new Map();       // ライブID → 体制key
 
   function emptyCandidates() {
-    return { venues: new Set(), groups: new Set(), liveTypes: new Set(DEFAULT_TYPES), member: new Map(), song: new Map(), costume: new Map(), cheki: new Map(), lineups: [], accounts: {}, mergeIgnore: [] };
+    return { venues: new Set(), groups: new Set(), liveTypes: new Set(DEFAULT_TYPES), member: new Map(), song: new Map(), costume: new Map(), cheki: new Map(), lineups: [], accounts: {}, mergeIgnore: [], timetree: { worker: '', cals: {} } };
   }
   function candToJSON(c) {
     const o = { venues: [...c.venues], groups: [...c.groups], liveTypes: [...c.liveTypes] };
@@ -727,6 +764,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     o.lineups = c.lineups.map(l => ({ group: l.group, members: [...l.members], start: l.start || '', end: l.end || '' }));
     o.accounts = { ...c.accounts };
     o.mergeIgnore = [...(c.mergeIgnore || [])];
+    o.timetree = { worker: (c.timetree && c.timetree.worker) || '', cals: { ...((c.timetree && c.timetree.cals) || {}) } };
     return o;
   }
   function candFromJSON(o) {
@@ -738,6 +776,8 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     c.lineups = Array.isArray(o.lineups) ? o.lineups.map(l => ({ group: l.group, members: [...(l.members || [])], start: l.start || '', end: l.end || '' })) : [];
     c.accounts = o.accounts && typeof o.accounts === 'object' ? { ...o.accounts } : {};
     c.mergeIgnore = Array.isArray(o.mergeIgnore) ? [...o.mergeIgnore] : [];
+    const tt = o.timetree && typeof o.timetree === 'object' ? o.timetree : {};
+    c.timetree = { worker: typeof tt.worker === 'string' ? tt.worker : '', cals: tt.cals && typeof tt.cals === 'object' ? { ...tt.cals } : {} };
     return c;
   }
   function addTo(c, kind, group, item) {
@@ -1473,6 +1513,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     $('liveEntryForm').reset();
     currentCheki = []; currentMembers = []; currentLineup = ''; lineupManual = false; currentChekiTweets = []; renderChekiTweets();
     tweetAccount = ''; lastFetched = ''; currentHints = []; renderHints([]); $('parseResult').hidden = true; $('tweetUrl').value = ''; $('tweetText').value = '';
+    loadedTweets = []; if (typeof renderLoaded === 'function') renderLoaded();
     formParts = [emptyPartSafe()]; activePart = 0; renderPartTabs();
     setKind('live');
     $('liveAttended').checked = scope === 'mine'; applyAttend();
@@ -2045,6 +2086,9 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   const normAcc = a => String(a || '').trim().replace(/^[@＠]/, '').replace(/^https?:\/\/(www\.)?(x|twitter)\.com\//i, '').split(/[/?\s]/)[0].toLowerCase();
   const accountsOf = g => Object.entries(cand.accounts || {}).filter(([, gg]) => gg === g).map(([a]) => a).sort();
   const groupOfAccount = a => (a && cand.accounts && cand.accounts[a]) || '';
+  // TimeTree のカレンダー名（https://timetr.ee/p/xxx や timetreeapp.com/public_calendars/xxx から取り出す）
+  const normCal = a => { const t = String(a || '').trim(); const m = t.match(/(?:timetr\.ee\/p\/|public_calendars\/)([A-Za-z0-9_\-]+)/); return (m ? m[1] : t.replace(/^[@＠]/, '')).split(/[/?#\s]/)[0]; };
+  const calsOf = g => Object.entries(cand.timetree.cals || {}).filter(([, gg]) => gg === g).map(([a]) => a).sort();
   function renderLineupManage() {
     const sel = $('lmGroup'), keep = sel.value;
     sel.innerHTML = '<option value="">グループを選択…</option>' + sortJa(view.groups).map(g => `<option value="${esc(g)}">${esc(g)}</option>`).join('');
@@ -2060,6 +2104,10 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     $('lmAccounts').innerHTML = accs.length
       ? accs.map(a => `<span class="chip">@${esc(a)}<button type="button" data-lmdelacc="${esc(a)}" aria-label="@${esc(a)}を削除">×</button></span>`).join('')
       : '<p class="empty">まだ登録されていません</p>';
+    const cals = calsOf(g);
+    $('lmCals').innerHTML = cals.length
+      ? cals.map(a => `<span class="chip">${esc(a)}<button type="button" data-lmdelcal="${esc(a)}" aria-label="${esc(a)}を削除">×</button></span>`).join('')
+      : '<p class="empty">まだ登録されていません</p>';
     const list = lineupsOfGroup(g);
     $('lmLineups').innerHTML = list.length ? list.map(l => `
       <div class="lineup-card">
@@ -2069,6 +2117,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     renderLmForm();
   }
   $('lmGroup').addEventListener('change', () => { resetLmForm(); renderLineupManage(); });
+  $('lmCalIn').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) $('lmCalAdd').click(); });
   $('lmAccountIn').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) $('lmAccountAdd').click(); });
   $('lmMemberIn').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) $('lmMemberAdd').click(); });
   $('lmPickAdd').addEventListener('click', () => lmPick($('lmPickIn').value));
@@ -2085,6 +2134,21 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       if (other === g) return toast('すでに登録されています');
       if (other && !await confirmBox(`@${a} は「${other}」に登録されています。「${g}」に変更しますか？`)) return;
       cand.accounts[a] = g; $('lmAccountIn').value = ''; Store.saveCandidates(); toast(`@${a} を登録しました`);
+      return;
+    }
+    if (t.id === 'lmCalAdd') {
+      const a = normCal($('lmCalIn').value);
+      if (!/^[A-Za-z0-9_\-]{1,64}$/.test(a)) return toast('TimeTreeのURL（https://timetr.ee/p/…）を入力してください', 'error');
+      const other = cand.timetree.cals[a];
+      if (other === g) return toast('すでに登録されています');
+      if (other && !await confirmBox(`${a} は「${other}」に登録されています。「${g}」に変更しますか？`)) return;
+      cand.timetree.cals[a] = g; $('lmCalIn').value = ''; Store.saveCandidates(); toast(`TimeTree「${a}」を登録しました`);
+      return;
+    }
+    if (t.dataset.lmdelcal) {
+      const a = t.dataset.lmdelcal;
+      if (!await confirmBox(`TimeTree「${a}」の登録を外しますか？`)) return;
+      delete cand.timetree.cals[a]; Store.saveCandidates(); toast(`「${a}」の登録を外しました`);
       return;
     }
     if (t.dataset.lmdelacc) {
@@ -2283,6 +2347,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       cand.groups.add(to);
       cand.lineups.forEach(l => { if (F.has(l.group)) l.group = to; });
       Object.keys(cand.accounts).forEach(a => { if (F.has(cand.accounts[a])) cand.accounts[a] = to; });
+      Object.keys(cand.timetree.cals).forEach(a => { if (F.has(cand.timetree.cals[a])) cand.timetree.cals[a] = to; });
     } else if (!isScoped(k)) {
       froms.forEach(f => cand[k].delete(f)); cand[k].add(to);
     } else {
@@ -2339,7 +2404,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       const pics = isGroup ? costumeImgs.filter(x => x.group === item) : k === 'costume' ? imgsOf(g, item) : [];
       if (!await confirmBox(`「${item}」を候補から削除しますか？${isGroup ? '（このグループの体制・メンバー・楽曲・衣装・チェキ相手の候補も消えます）' : ''}${pics.length ? `\n衣装の写真${pics.length}枚も削除されます。` : ''}`)) return;
       for (const x of pics) await Store.deleteCostumeImage(x.id);
-      if (isGroup) { cand.groups.delete(item); KINDS.forEach(kind => cand[kind].delete(item)); cand.lineups = cand.lineups.filter(l => l.group !== item); Object.keys(cand.accounts).forEach(a => { if (cand.accounts[a] === item) delete cand.accounts[a]; }); }
+      if (isGroup) { cand.groups.delete(item); KINDS.forEach(kind => cand[kind].delete(item)); cand.lineups = cand.lineups.filter(l => l.group !== item); Object.keys(cand.accounts).forEach(a => { if (cand.accounts[a] === item) delete cand.accounts[a]; }); Object.keys(cand.timetree.cals).forEach(a => { if (cand.timetree.cals[a] === item) delete cand.timetree.cals[a]; }); }
       else if (isScoped(k)) cand[k].get(g)?.delete(item);
       else cand[k].delete(item);
       await Store.saveCandidates();
@@ -2595,7 +2660,9 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       }
     }
     if (!liveName && dateRest) {
-      if (!r.venue) r.venue = canonical(dateRest, venues) || dateRest;
+      // 日付の行の残りは、知っている会場ならば会場、そうでなければライブ名
+      const v = canonical(dateRest, venues) || longestContained(dateRest, venues);
+      if (!r.venue && v) r.venue = v;
       else if (norm(dateRest) !== norm(r.venue)) liveName = dateRest;
     }
     r.liveName = liveName.replace(/[#＃]\S+/g, '').trim();
@@ -2628,6 +2695,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     const pushHint = v => {
       v = stripBrackets(String(v || '').replace(/^[\s\-－・:：|｜/／>＞→＝=]+|[\s\-－・:：|｜/／!！]+$/g, ''));
       if (/ありがと|お疲れ|おつかれ|来場|ご覧|お越し|応援|感謝|よろしく|お願い|楽しかった|最高でした|待ってます|^本日$|^今日$/.test(v)) return;
+      if (/^(告知|お知らせ|解禁|決定|開催決定|OPEN|START|開場|開演|チケット|前売|当日|料金|入場|ドリンク|特典|物販|配信|詳細|予約)|発売中|受付中|[¥￥]\s*\d|^\d{1,2}[:：]\d{2}/i.test(v)) return;
       const k = loose(v);
       if (v.length < 2 || v.length > 40 || !k || /^\d+$/.test(k) || skip.has(k)) return;
       if (HEADER_RE.test(v) && v.replace(HEADER_RE, '').trim().length < 2) return;
@@ -2685,8 +2753,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     } else refreshLineupSelect(true);
     if (r.songs.length) F.setlist.value = r.songs.join('\n');
     renderHints(currentHints); renderPartTabs(); renderCostumePreview();
-    const url = $('tweetUrl').value.trim().split('?')[0];
-    if (url && !F.memo.value.includes(url)) F.memo.value = (F.memo.value ? F.memo.value + '\n' : '') + '元ツイート: ' + url;
+    (loadedTweets.length ? loadedTweets.filter(t => t.ok).map(t => t.url) : tweetUrlsIn()).forEach(url => { if (!F.memo.value.includes(url)) F.memo.value = (F.memo.value ? F.memo.value + '\n' : '') + '元ツイート: ' + url; });
   }
   function renderParseResult(r) {
     const row = (label, v, note) => `<dt>${label}</dt><dd>${v ? esc(v) + (note ? `<span class="note">${esc(note)}</span>` : '') : '<span class="miss">読み取れませんでした</span>'}</dd>`;
@@ -2706,45 +2773,100 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       ${tweetAccount && !groupOfAccount(tweetAccount) ? `<p class="hint">@${esc(tweetAccount)} はまだグループに登録されていません。このまま保存すると、次からこのアカウントのツイートは「${esc(F.group.value.trim() || 'このグループ')}」として判別します。</p>` : ''}
       ${currentHints.length ? '<p class="hint">ライブ名・会場の欄の下に、ツイートから切り出した候補を出しています。押すとその欄に入ります。</p>' : ''}
       ${!r.group && r.hashtags.length ? `<p class="hint">ハッシュタグ: ${r.hashtags.map(h => '#' + esc(h)).join(' ')}。グループを「候補の管理」に登録しておくと次から自動で判別します。</p>` : ''}
-      ${!r.songs.length ? '<p class="hint">曲が見つかりませんでした。セトリが画像のツイートは読み取れないので、フォームに入力してください。</p>' : ''}`;
+      ${!r.songs.length ? '<p class="hint">曲が見つかりませんでした。セトリが画像のツイートは読み取れないので、フォームに入力してください。</p>' : ''}
+      ${r.sources > 1 ? `<p class="hint">${r.sources}件のツイートから読み取りました。セトリは曲がいちばん多いツイート、ほかの項目は読み取れたツイートの内容を使い、ライブ名・会場は全部のツイートから候補を出しています。</p>` : ''}
+      ${r.songTweets && r.songTweets.length > 1 && getKind() === 'live' ? `<div class="row" style="align-items:center"><span class="hint">セトリの入ったツイートが${r.songTweets.length}件あります。</span><button type="button" class="btn sm" id="splitTweetsBtn">ツイートごとにステージに分けて入れる</button></div>` : ''}`;
     box.hidden = false;
+    lastParsed = r;
   }
+  let lastParsed = null;
+  $('parseResult').addEventListener('click', e => {
+    if (!e.target.closest('#splitTweetsBtn') || !lastParsed) return;
+    const ts = lastParsed.songTweets;
+    formParts = ts.map((t, i) => ({ label: t.label || `ステージ${i + 1}`, costume: t.costume || '', setlist: t.songs.join('\n'), chekiDetails: [], chekiTweets: [] }));
+    loadPartToForm(0);
+    toast(`${ts.length}つのステージに分けました。ステージ名を確認してください`);
+  });
+  // 本文を「---」だけの行で区切って、ツイートごとに解析してから1つにまとめる
+  const tweetUrlsIn = () => [...new Set($('tweetUrl').value.split(/\s+/).map(u => u.trim().split('?')[0]).filter(u => tweetId(u)))];
+  let loadedTweets = []; // { url, date, account, ok }
   function runParse() {
     const text = $('tweetText').value.trim();
     if (!text) { $('tweetTextBox').open = true; return toast('ツイート本文を貼り付けてください', 'error'); }
-    const r = parseSetlistText(text);
+    const chunks = text.split(/^\s*-{3,}\s*$/m).map(t => t.trim()).filter(Boolean);
+    const okTweets = loadedTweets.filter(t => t.ok);
+    const rs = chunks.map((t, i) => {
+      const meta = okTweets[i] || {};
+      tweetPostDate = meta.date || ''; tweetAccount = meta.account || '';
+      return parseSetlistText(t);
+    });
+    // 主になるツイート＝曲がいちばん多いもの
+    let mi = 0; rs.forEach((x, i) => { if (x.songs.length > rs[mi].songs.length) mi = i; });
+    const main = rs[mi], r = { ...main, hints: [] };
+    // 日付は本文に書かれた日付を優先（投稿日はほかに無いときだけ）
+    const textDated = rs.find(x => x.date && x.dateSource !== 'ツイートの投稿日');
+    if (textDated && (main.dateSource === 'ツイートの投稿日' || !main.date)) { r.date = textDated.date; r.dateSource = textDated.dateSource; }
+    ['date', 'dateSource', 'venue', 'group', 'groupSource', 'liveName', 'liveType', 'costume', 'absent'].forEach(k => {
+      if (!r[k]) { const o = rs.find(x => x[k]); if (o) r[k] = o[k]; }
+    });
+    if (!r.members.length) { const o = rs.find(x => x.members.length); if (o) r.members = o.members; }
+    // ライブ名・会場の候補は全部のツイートから（各ツイートで読み取った名前・会場を先に）
+    const hints = [];
+    const add = h => { if (h && !hints.some(x => loose(x) === loose(h))) hints.push(h); };
+    rs.forEach(x => { add(x.liveName); add(x.venue); });
+    rs.forEach(x => x.hints.forEach(add));
+    r.hints = hints.slice(0, 16);
+    r.sources = rs.length;
+    // ステージ名は、そのツイートにだけ書かれている言葉（例: SOMARIステージ）から付ける
+    const songRs = rs.filter(x => x.songs.length);
+    r.songTweets = songRs.map(x => {
+      const uniq = x.hints.filter(h => !songRs.some(o => o !== x && o.hints.some(oh => loose(oh) === loose(h))));
+      const label = uniq.find(h => /ステージ|STAGE|部|公演|回|:\d{2}|時/i.test(h)) || uniq[0] || (x.liveName && x.liveName !== r.liveName ? x.liveName : '') || (x.venue && x.venue !== r.venue ? x.venue : '');
+      return { songs: x.songs, costume: x.costume, label };
+    });
+    tweetAccount = (okTweets[mi] || okTweets[0] || {}).account || '';
+    tweetPostDate = (okTweets[mi] || okTweets[0] || {}).date || '';
     applyParsed(r); renderParseResult(r);
-    toast('フォームに反映しました');
+    toast(rs.length > 1 ? `${rs.length}件のツイートを読み取ってフォームに反映しました` : 'フォームに反映しました');
   }
   $('parseTweetBtn').addEventListener('click', runParse);
+  function renderLoaded() {
+    $('tweetLoaded').innerHTML = loadedTweets.map(t => `<span class="chip ${t.ok ? '' : 'off'}" title="${esc(t.url)}">${t.ok ? '✓' : '×'} ${esc(t.account ? '@' + t.account : 'ツイート')}${t.date ? ' ' + esc(fmtDate(t.date)) : ''}${t.ok ? '' : '（読み込めませんでした）'}</span>`).join('');
+  }
   let lastFetched = '';
   async function loadFromUrl() {
-    const url = $('tweetUrl').value.trim().split('?')[0];
-    if (!tweetId(url)) return toast('ツイートのURL（…/status/数字）を貼ってください', 'error');
+    const urls = tweetUrlsIn();
+    if (!urls.length) return toast('ツイートのURL（…/status/数字）を貼ってください', 'error');
+    const key = urls.join(' ');
     const btn = $('fetchTweetBtn');
-    btn.disabled = true; btn.textContent = '読み込み中…';
+    btn.disabled = true; btn.textContent = `読み込み中… 0/${urls.length}`;
     try {
-      const info = await fetchTweetInfo(url);
-      if (!info.text) {
-        tweetPostDate = '';
+      let done = 0;
+      const infos = await Promise.all(urls.map(async url => {
+        const info = await fetchTweetInfo(url);
+        btn.textContent = `読み込み中… ${++done}/${urls.length}`;
+        const fromUrl = normAcc((url.match(/(?:x|twitter)\.com\/([^/]+)\/status/i) || [])[1]);
+        return { url, text: info.text, date: info.date, account: fromUrl && fromUrl !== 'i' ? fromUrl : normAcc(info.authorUrl), ok: !!info.text };
+      }));
+      loadedTweets = infos; renderLoaded();
+      const ok = infos.filter(t => t.ok);
+      if (!ok.length) {
         $('tweetTextBox').open = true;
         return toast('本文を読み込めませんでした（非公開・削除済み、または通信エラー）。本文をコピーして貼り付けてください', 'error');
       }
-      if (!editingId && formParts.length === 1 && lastFetched && lastFetched !== url) { resetForm(); $('tweetUrl').value = url; } // 別のツイートを読み込むときは前の内容を消す（ステージを追加中は消さない）
-      lastFetched = url;
-      tweetPostDate = info.date;
-      const fromUrl = normAcc((url.match(/(?:x|twitter)\.com\/([^/]+)\/status/i) || [])[1]);
-      tweetAccount = fromUrl && fromUrl !== 'i' ? fromUrl : normAcc(info.authorUrl);
-      $('tweetText').value = info.text;
+      // 別のライブのツイートを読み込むときは前の内容を消す（ステージを追加中は消さない）
+      if (!editingId && formParts.length === 1 && lastFetched && !urls.some(u => lastFetched.includes(u))) { resetForm(); $('tweetUrl').value = urls.join('\n'); loadedTweets = infos; renderLoaded(); }
+      lastFetched = key;
+      $('tweetText').value = ok.map(t => t.text).join('\n---\n');
       runParse();
+      if (ok.length < infos.length) toast(`${infos.length}件中${infos.length - ok.length}件は読み込めませんでした（非公開・削除済みなど）`, 'error');
     } finally { btn.disabled = false; btn.textContent = 'URLから読み込む'; }
   }
   $('fetchTweetBtn').addEventListener('click', loadFromUrl);
   // URLを貼り付けたら自動で読み込む
-  $('tweetUrl').addEventListener('paste', () => setTimeout(() => { const u = $('tweetUrl').value.trim().split('?')[0]; if (tweetId(u) && u !== lastFetched) loadFromUrl(); }, 50));
-  $('tweetUrl').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); loadFromUrl(); } });
-  $('tweetUrl').addEventListener('input', () => { if ($('tweetUrl').value.trim().split('?')[0] !== lastFetched) { tweetPostDate = ''; tweetAccount = ''; } });
-  $('clearTweetBtn').addEventListener('click', () => { $('tweetText').value = ''; $('tweetUrl').value = ''; tweetPostDate = ''; tweetAccount = ''; lastFetched = ''; $('parseResult').hidden = true; currentHints = []; renderHints([]); });
+  $('tweetUrl').addEventListener('paste', () => setTimeout(() => { const us = tweetUrlsIn(); if (us.length && us.join(' ') !== lastFetched) loadFromUrl(); }, 50));
+  $('tweetUrl').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !e.isComposing) { e.preventDefault(); loadFromUrl(); } });
+  $('clearTweetBtn').addEventListener('click', () => { $('tweetText').value = ''; $('tweetUrl').value = ''; tweetPostDate = ''; tweetAccount = ''; lastFetched = ''; loadedTweets = []; renderLoaded(); $('parseResult').hidden = true; currentHints = []; renderHints([]); });
 
   // ================= 衣装の写真 =================
   const imgsOf = (group, costume) => costumeImgs.filter(x => x.group === group && x.costume === costume);
@@ -2844,6 +2966,172 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   F.costume.addEventListener('change', renderCostumePreview);
   F.group.addEventListener('change', renderCostumePreview);
 
+
+  // ================= TimeTree から取り込む =================
+  let ttEvents = []; // { ev, group, alias, date, title, venue, time, status, check }
+  const TT_NOT_LIVE = /(発売|予約|受付|締切|締め切り|配信開始|生配信|配信のみ|SHOWROOM|ツイキャス|YouTube|インスタライブ|ラジオ|放送|オンラインサイン|通販|抽選|当選発表)/i;
+  function renderTTGroups() {
+    const sel = $('ttGroup'), keep = sel.value;
+    const groups = [...new Set(Object.values(cand.timetree.cals || {}))].sort((a, b) => a.localeCompare(b, 'ja'));
+    sel.innerHTML = groups.length
+      ? (groups.length > 1 ? '<option value="*">登録したすべてのグループ</option>' : '') + groups.map(g => `<option value="${esc(g)}">${esc(g)}</option>`).join('')
+      : '<option value="">（候補の管理でTimeTreeカレンダーを登録してください）</option>';
+    if ([...sel.options].some(o => o.value === keep)) sel.value = keep;
+    $('ttLoad').disabled = !groups.length;
+    if (document.activeElement !== $('ttWorker')) $('ttWorker').value = cand.timetree.worker || '';
+  }
+  const ttMs = v => { const n = Number(v); return n && n < 1e12 ? n * 1000 : n; };
+  function ttDate(e) {
+    const ms = ttMs(e.start_at);
+    if (!ms) return '';
+    const d = new Date(e.all_day ? ms : ms + 9 * 3600 * 1000); // 終日はUTCの日付、それ以外は日本時間
+    return d.toISOString().slice(0, 10);
+  }
+  function ttTime(e) {
+    if (e.all_day) return '';
+    const d = new Date(ttMs(e.start_at) + 9 * 3600 * 1000);
+    return d.toISOString().slice(11, 16);
+  }
+  function ttTitle(t) {
+    t = String(t || '').trim();
+    const m = t.match(/^[『「【](.+?)[』」】]$/);
+    return (m ? m[1] : t).trim();
+  }
+  function ttVenue(e) {
+    if (e.location && String(e.location).trim()) return String(e.location).trim();
+    const lines = String(e.note || '').split(/\r?\n/).map(x => x.trim()).filter(Boolean);
+    const skip = /(開場|開演|OPEN|START|open|start|チケット|料金|前売|当日|出演|ドリンク|特典|物販|配信|URL|http|時間|TIME|タイム|日程|日時)/;
+    for (const l of lines) {
+      const m = l.match(/^(?:会場|場所|ライブ会場|venue)\s*[:：]\s*(.+)$/i);
+      if (m) return m[1].trim();
+    }
+    for (const l of lines) {
+      const m = l.match(/^(?:■|◼|◆|●|📍|🏠|📌)\s*(.+)$/);
+      if (m && !skip.test(m[1])) return m[1].replace(/[（(]\s*[^）)]*(?:駅|徒歩)[^）)]*[）)]\s*$/, '').trim();
+    }
+    return '';
+  }
+  function ttStartTime(e) {
+    const m = String(e.note || '').match(/開演\s*[:：]?\s*(\d{1,2}[:：]\d{2})/);
+    return m ? m[1].replace('：', ':') : ttTime(e);
+  }
+  function ttGuessType(title) {
+    const types = [...view.liveTypes];
+    title = title.replace(/(配信|リリース)記念/g, '');
+    for (const [re, t] of TYPE_KEYWORDS) if (re.test(title)) return canonical(t, types) || t;
+    return longestContained(title, types) || '';
+  }
+  function renderTTList() {
+    const box = $('ttList');
+    if (!ttEvents.length) { box.innerHTML = ''; $('ttActions').hidden = true; return; }
+    const today = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+    box.innerHTML = ttEvents.map((x, i) => {
+      const tags = [];
+      if (x.status === 'done') tags.push('<span class="tt-tag done">取り込み済み</span>');
+      if (x.status === 'deleted') tags.push('<span class="tt-tag">削除済み</span>');
+      if (x.status === 'same') tags.push('<span class="tt-tag warn">同じ日の記録あり</span>');
+      if (x.notLive) tags.push('<span class="tt-tag warn">ライブ以外かも</span>');
+      if (x.date > today) tags.push('<span class="tt-tag">これから</span>');
+      const dis = x.status === 'done' ? 'disabled' : '';
+      return `<label class="tt-item"><input type="checkbox" data-tt="${i}" ${x.check ? 'checked' : ''} ${dis}>
+        <span class="tt-main"><span class="tt-title">${esc(x.title || '（タイトルなし）')}</span>${tags.join('')}
+        <span class="tt-sub" style="display:block">${esc(fmtDate(x.date))}${x.time ? ' ' + esc(x.time) : ''}・${esc(x.group)}${x.venue ? '・' + esc(x.venue) : ''}${x.liveType ? '・' + esc(x.liveType) : ''}</span></span></label>`;
+    }).join('');
+    $('ttActions').hidden = !ttEvents.some(x => x.status !== 'done');
+    updateTTCount();
+  }
+  function updateTTCount() {
+    const n = ttEvents.filter(x => x.check).length;
+    $('ttImport').textContent = n ? `選んだ${n}件を取り込む` : '選んだ予定を取り込む';
+    $('ttImport').disabled = !n;
+  }
+  $('ttList').addEventListener('change', e => {
+    const i = e.target.dataset.tt;
+    if (i == null) return;
+    ttEvents[+i].check = e.target.checked; updateTTCount();
+  });
+  $('ttWorkerSave').addEventListener('click', () => {
+    let u = $('ttWorker').value.trim().replace(/\/+$/, '');
+    if (u && !/^https:\/\/[A-Za-z0-9.\-]+(\/[^\s]*)?$/.test(u)) return toast('https:// から始まるURLを入力してください', 'error');
+    cand.timetree.worker = u; Store.saveCandidates(); toast(u ? '中継サーバーのURLを保存しました' : '中継サーバーのURLを消しました');
+  });
+  async function ttFetchCal(alias) {
+    const base = (cand.timetree.worker || '').replace(/\/+$/, '');
+    const r = await fetch(`${base}/events/${encodeURIComponent(alias)}?back=12&ahead=6`);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    if (!j || !Array.isArray(j.public_events)) throw new Error('bad response');
+    return j;
+  }
+  $('ttLoad').addEventListener('click', async () => {
+    if (!cand.timetree.worker) {
+      $('ttPanel').querySelector('details').open = true;
+      return toast('先に「中継サーバーの設定」でURLを保存してください', 'error');
+    }
+    const sel = $('ttGroup').value;
+    const targets = Object.entries(cand.timetree.cals || {}).filter(([, g]) => sel === '*' || g === sel);
+    if (!targets.length) return toast('TimeTreeカレンダーが登録されていません', 'error');
+    const btn = $('ttLoad'); btn.disabled = true; $('ttMsg').textContent = '読み込み中…';
+    ttEvents = []; renderTTList();
+    const errs = [];
+    let range = null;
+    for (const [alias, group] of targets) {
+      try {
+        const j = await ttFetchCal(alias);
+        if (j.from) range = { from: Math.min(range ? range.from : Infinity, j.from), to: Math.max(range ? range.to : 0, j.to) };
+        j.public_events.forEach(ev => {
+          const date = ttDate(ev);
+          if (!date) return;
+          const title = ttTitle(ev.title);
+          ttEvents.push({ ev, alias, group, date, title, venue: canonical(ttVenue(ev), [...view.venues]) || ttVenue(ev), time: ttStartTime(ev), liveType: ttGuessType(title), notLive: TT_NOT_LIVE.test(ev.title || '') });
+        });
+      } catch (err) { errs.push(`${group}（${alias}）`); }
+    }
+    const byTT = new Map(), deletedTT = new Set();
+    liveData.forEach(d => { if (d.timetreeId) byTT.set(String(d.timetreeId), d); });
+    deletedLiveData.forEach(d => { if (d.timetreeId) deletedTT.add(String(d.timetreeId)); });
+    ttEvents.forEach(x => {
+      const id = String(x.ev.id);
+      if (byTT.has(id)) x.status = 'done';
+      else if (deletedTT.has(id)) x.status = 'deleted';
+      else if (liveData.some(d => d.date === x.date && d.group === x.group && (!d.kind || d.kind === 'live'))) x.status = 'same';
+      else x.status = 'new';
+      x.check = x.status === 'new' && !x.notLive;
+    });
+    ttEvents.sort((a, b) => a.date.localeCompare(b.date) || (a.time || '').localeCompare(b.time || '') || a.group.localeCompare(b.group, 'ja'));
+    btn.disabled = false;
+    const span = range ? `（${fmtDate(new Date(range.from + 9 * 3600 * 1000).toISOString().slice(0, 10))}〜${fmtDate(new Date(range.to - 1 + 9 * 3600 * 1000).toISOString().slice(0, 10))}）` : '';
+    $('ttMsg').textContent = (ttEvents.length ? `${ttEvents.length}件の予定が見つかりました${span}。取り込むものにチェックを入れてください。` : `予定が見つかりませんでした${span}。`)
+      + (errs.length ? ` ※読み込めなかったカレンダー：${errs.join('、')}（中継サーバーのURLやカレンダー名を確認してください）` : '');
+    renderTTList();
+  });
+  $('ttImport').addEventListener('click', async () => {
+    const picks = ttEvents.filter(x => x.check && x.status !== 'done');
+    if (!picks.length) return;
+    const attendedYes = $('ttAttended').checked;
+    if (!await confirmBox(`${picks.length}件の予定を${attendedYes ? '行ったライブ' : 'グループ全体のライブ（行っていない）'}として保存しますか？`)) return;
+    const btn = $('ttImport'); btn.disabled = true;
+    let n = 0;
+    try {
+      for (const x of picks) {
+        const list = lineupsOfGroup(x.group);
+        const l = pickLineupByDate(list, x.date) || (list.length ? list[list.length - 1] : null);
+        const url = x.ev.url || `https://timetr.ee/p/${x.alias}/${x.ev.id}`;
+        const memo = [x.time ? `開演 ${x.time}` : '', String(x.ev.note || '').trim(), `TimeTree: ${url}`].filter(Boolean).join('\n');
+        const now = Date.now() + n;
+        Store.putLive(withParts({
+          id: genId(), kind: 'live', attended: attendedYes, date: x.date, group: x.group,
+          liveName: x.title, liveType: x.liveType || '', venue: x.venue || '',
+          members: l ? [...l.members] : [], lineup: l ? l.key : '',
+          memo, timetreeId: String(x.ev.id), timetreeCal: x.alias, createdAt: now, updatedAt: now,
+        }, [{ label: '', costume: '', setlist: '', chekiDetails: [], chekiTweets: [] }]));
+        x.status = 'done'; x.check = false; n++;
+      }
+      toast(`${n}件のライブを取り込みました`);
+    } catch (err) { writeError(err); }
+    finally { renderTTList(); }
+  });
+
   // ================= 描画まとめ =================
   function renderAll() {
     rebuildView();
@@ -2855,6 +3143,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     refreshLineupSelect(false);
     renderCostumePreview();
     renderImgModal();
+    renderTTGroups();
   }
 
   // 初期表示
