@@ -340,9 +340,11 @@ body.scope-all .top { box-shadow: inset 0 -3px 0 var(--warn-soft); }
 
     <details class="panel inset" id="ttPanel">
       <summary><h2 style="display:inline">TimeTreeのスケジュールから取り込む</h2></summary>
-      <p class="hint">グループ公式のTimeTreeカレンダーからライブの予定を読み込み、選んだものを「グループ全体」のライブ（行っていない扱い）として保存します。行ったライブは、保存後に一覧の「行った」で切り替えられます。TimeTreeの仕組み上、読めるのは<b>約12週間前〜約6週間先</b>の予定です。</p>
+      <p class="hint">グループ公式のTimeTreeカレンダーからライブの予定を読み込み、選んだものを「グループ全体」のライブ（行っていない扱い）として保存します。行ったライブは、保存後に一覧の「行った」で切り替えられます。期間は自由に選べます（1回に最大3年分）。</p>
       <div class="row" style="flex-wrap:wrap">
         <div class="grow"><label class="lbl" for="ttGroup">グループ</label><select id="ttGroup" class="field"></select></div>
+        <div><label class="lbl" for="ttFrom">いつから</label><input type="date" id="ttFrom" class="field"></div>
+        <div><label class="lbl" for="ttTo">いつまで</label><input type="date" id="ttTo" class="field"></div>
         <button type="button" id="ttLoad" class="btn primary" style="align-self:flex-end">予定を読み込む</button>
       </div>
       <p id="ttMsg" class="hint"></p>
@@ -2980,6 +2982,10 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     $('ttLoad').disabled = !groups.length;
     if (document.activeElement !== $('ttWorker')) $('ttWorker').value = cand.timetree.worker || '';
   }
+  (() => {
+    const day = n => new Date(Date.now() + 9 * 3600 * 1000 + n * 86400000).toISOString().slice(0, 10);
+    $('ttFrom').value = day(-90); $('ttTo').value = day(60);
+  })();
   const ttMs = v => { const n = Number(v); return n && n < 1e12 ? n * 1000 : n; };
   function ttDate(e) {
     const ms = ttMs(e.start_at);
@@ -3057,7 +3063,10 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   });
   async function ttFetchCal(alias) {
     const base = (cand.timetree.worker || '').replace(/\/+$/, '');
-    const r = await fetch(`${base}/events/${encodeURIComponent(alias)}?back=12&ahead=6`);
+    const q = new URLSearchParams();
+    if ($('ttFrom').value) q.set('from', $('ttFrom').value);
+    if ($('ttTo').value) q.set('to', $('ttTo').value);
+    const r = await fetch(`${base}/events/${encodeURIComponent(alias)}?${q}`);
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const j = await r.json();
     if (!j || !Array.isArray(j.public_events)) throw new Error('bad response');
@@ -3068,6 +3077,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       $('ttPanel').querySelector('details').open = true;
       return toast('先に「中継サーバーの設定」でURLを保存してください', 'error');
     }
+    if ($('ttFrom').value && $('ttTo').value && $('ttFrom').value > $('ttTo').value) return toast('「いつから」は「いつまで」より前の日付にしてください', 'error');
     const sel = $('ttGroup').value;
     const targets = Object.entries(cand.timetree.cals || {}).filter(([, g]) => sel === '*' || g === sel);
     if (!targets.length) return toast('TimeTreeカレンダーが登録されていません', 'error');
@@ -3086,6 +3096,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
           ttEvents.push({ ev, alias, group, date, title, venue: canonical(ttVenue(ev), [...view.venues]) || ttVenue(ev), time: ttStartTime(ev), liveType: ttGuessType(title), notLive: TT_NOT_LIVE.test(ev.title || '') });
         });
       } catch (err) { errs.push(`${group}（${alias}）`); }
+      $('ttMsg').textContent = `読み込み中…（${targets.findIndex(t => t[0] === alias) + 1}/${targets.length}）`;
     }
     const byTT = new Map(), deletedTT = new Set();
     liveData.forEach(d => { if (d.timetreeId) byTT.set(String(d.timetreeId), d); });
