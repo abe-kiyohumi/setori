@@ -266,6 +266,10 @@ body.scope-all .top { box-shadow: inset 0 -3px 0 var(--warn-soft); }
   .tt-tag.done { background: var(--ok-soft); color: var(--ok); }
   .tt-tag.warn { background: var(--warn-soft); color: var(--warn); }
   #ttPanel > summary { cursor: pointer; list-style: revert; }
+  .ttinfo { margin-top: 4px; font-size: 0.85rem; }
+  .ttinfo > summary { cursor: pointer; color: var(--muted); }
+  .ttinfo a { display: inline-block; margin-top: 4px; color: var(--accent); }
+  a.btn { text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
 </style>
 </head>
 <body class="signed-out">
@@ -318,12 +322,13 @@ body.scope-all .top { box-shadow: inset 0 -3px 0 var(--warn-soft); }
   <section class="tab" id="tab-entry">
     <div class="panel inset">
       <h2>Xのセトリツイートから読み込む</h2>
-      <p class="hint">ツイートのURLを貼ると、本文を読み込んで日付・会場・グループ・ライブ名と種類・体制・衣装・セットリストを下のフォームに入れます。告知ツイートとセトリのツイートなど、同じライブのツイートは何件でもまとめて貼れます（1行に1つ）。うまく読み込めないときは、本文をコピーして下の欄に貼ってください。</p>
+      <p class="hint">「Xでセトリを探す」を押すと、下のフォームのグループ・日付でセトリのハッシュタグをXで検索します（ハッシュタグは候補の管理で登録）。見つけたツイートのURLをコピーして貼ってください。<br>ツイートのURLを貼ると、本文を読み込んで日付・会場・グループ・ライブ名と種類・体制・衣装・セットリストを下のフォームに入れます。告知ツイートとセトリのツイートなど、同じライブのツイートは何件でもまとめて貼れます（1行に1つ）。うまく読み込めないときは、本文をコピーして下の欄に貼ってください。</p>
       <div>
         <label class="lbl" for="tweetUrl">ツイートのURL（複数可・1行に1つ）</label>
         <div class="row">
           <div class="grow"><textarea id="tweetUrl" class="field" rows="2" placeholder="https://x.com/…/status/…&#10;https://x.com/…/status/…"></textarea></div>
           <button type="button" id="fetchTweetBtn" class="btn primary">URLから読み込む</button>
+          <a id="xSearchBtn" class="btn" href="https://x.com/search" target="_blank" rel="noopener">Xでセトリを探す</a>
         </div>
         <div id="tweetLoaded" class="chips" style="margin-top:6px"></div>
       </div>
@@ -615,6 +620,12 @@ body.scope-all .top { box-shadow: inset 0 -3px 0 var(--warn-soft); }
           <div class="row"><div class="grow"><input id="lmAccountIn" class="field" placeholder="@アカウント名"></div><button type="button" id="lmAccountAdd" class="btn">追加</button></div>
         </div>
         <div class="panel inset">
+          <h3>セトリ用ハッシュタグ</h3>
+          <p class="hint">「Xでセトリを探す」で検索するハッシュタグです（例：#手羽セトリ）。登録がないときはグループ名と「セトリ」で探します。</p>
+          <div id="lmTags" class="chips"></div>
+          <div class="row"><div class="grow"><input id="lmTagIn" class="field" placeholder="#ハッシュタグ"></div><button type="button" id="lmTagAdd" class="btn">追加</button></div>
+        </div>
+        <div class="panel inset">
           <h3>TimeTreeカレンダー</h3>
           <p class="hint">グループ公式のTimeTree公開カレンダーのURL（https://timetr.ee/p/… ）を登録すると、「記録する」タブからライブ予定を取り込めます。</p>
           <div id="lmCals" class="chips"></div>
@@ -758,7 +769,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   let liveLineup = new Map();       // ライブID → 体制key
 
   function emptyCandidates() {
-    return { venues: new Set(), groups: new Set(), liveTypes: new Set(DEFAULT_TYPES), member: new Map(), song: new Map(), costume: new Map(), cheki: new Map(), lineups: [], accounts: {}, mergeIgnore: [], timetree: { worker: '', cals: {} } };
+    return { venues: new Set(), groups: new Set(), liveTypes: new Set(DEFAULT_TYPES), member: new Map(), song: new Map(), costume: new Map(), cheki: new Map(), lineups: [], accounts: {}, mergeIgnore: [], timetree: { worker: '', cals: {} }, setoriTags: {} };
   }
   function candToJSON(c) {
     const o = { venues: [...c.venues], groups: [...c.groups], liveTypes: [...c.liveTypes] };
@@ -766,6 +777,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     o.lineups = c.lineups.map(l => ({ group: l.group, members: [...l.members], start: l.start || '', end: l.end || '' }));
     o.accounts = { ...c.accounts };
     o.mergeIgnore = [...(c.mergeIgnore || [])];
+    o.setoriTags = Object.fromEntries(Object.entries(c.setoriTags || {}).map(([g, t]) => [g, [...t]]));
     o.timetree = { worker: (c.timetree && c.timetree.worker) || '', cals: { ...((c.timetree && c.timetree.cals) || {}) } };
     return o;
   }
@@ -778,6 +790,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     c.lineups = Array.isArray(o.lineups) ? o.lineups.map(l => ({ group: l.group, members: [...(l.members || [])], start: l.start || '', end: l.end || '' })) : [];
     c.accounts = o.accounts && typeof o.accounts === 'object' ? { ...o.accounts } : {};
     c.mergeIgnore = Array.isArray(o.mergeIgnore) ? [...o.mergeIgnore] : [];
+    c.setoriTags = o.setoriTags && typeof o.setoriTags === 'object' ? Object.fromEntries(Object.entries(o.setoriTags).filter(([, t]) => Array.isArray(t)).map(([g, t]) => [g, [...t]])) : {};
     const tt = o.timetree && typeof o.timetree === 'object' ? o.timetree : {};
     c.timetree = { worker: typeof tt.worker === 'string' ? tt.worker : '', cals: tt.cals && typeof tt.cals === 'object' ? { ...tt.cals } : {} };
     return c;
@@ -1573,7 +1586,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       const ps = partsOf(d);
       const btns = deleted
         ? `<button class="btn sm" data-act="restore" data-id="${esc(d.id)}">復元</button><button class="btn sm danger" data-act="purge" data-id="${esc(d.id)}">完全に削除</button>`
-        : `<button class="btn sm" data-act="edit" data-id="${esc(d.id)}">編集</button><button class="btn sm" data-act="copy" data-id="${esc(d.id)}">コピー</button><button class="btn sm" data-act="split" data-id="${esc(d.id)}">ステージごとに分ける</button><button class="btn sm danger" data-act="delete" data-id="${esc(d.id)}">削除</button>`;
+        : `<a class="btn sm" href="${esc(xSearchURL(d.group, d.date))}" target="_blank" rel="noopener">Xでセトリを探す</a><button class="btn sm" data-act="edit" data-id="${esc(d.id)}">編集</button><button class="btn sm" data-act="copy" data-id="${esc(d.id)}">コピー</button><button class="btn sm" data-act="split" data-id="${esc(d.id)}">ステージごとに分ける</button><button class="btn sm danger" data-act="delete" data-id="${esc(d.id)}">削除</button>`;
       return `<article class="live">
       <div class="meta">
         <span class="date">${esc(d.date)}</span>
@@ -1581,7 +1594,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
         <span class="sub">${scope === 'all' ? (attended(d) ? '<span class="tag att">行った</span>' : '<span class="tag noatt">行っていない</span>') : ''}${d.liveType ? `<span class="tag">${esc(d.liveType)}</span>` : ''}<span class="tag parts">${ps.length}ステージ</span><b>${esc(d.group || '—')}</b> ／ ${esc(d.venue || '会場未記録')}</span>
         ${memberLine(d)}
         ${ps.map((p, i) => `<div class="part-block"><span class="plabel">${esc(partName(p, i))}${p.costume ? `<span class="note" style="font-weight:400;color:var(--muted)"> ／ 衣装: ${esc(p.costume)}</span>` : ''}</span>${partHTML(d, p, deleted, false)}${deleted ? '' : `<div><button type="button" class="btn sm" data-act="cheki-part" data-id="${esc(d.id)}" data-part="${i}">＋このステージのチェキを追加</button></div>`}</div>`).join('')}
-        ${d.memo && !deleted ? `<div class="memo">${esc(d.memo)}</div>` : ''}
+        ${deleted ? '' : memoHTML(d)}
       </div>
       <div class="btns">${btns}</div>
     </article>`;
@@ -1597,7 +1610,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
         <span class="name">${esc(d.liveName || KIND_LABEL[k])}</span>
         <span class="sub"><span class="tag kind-${k}">${KIND_LABEL[k]}</span><b>${esc(d.group || '—')}</b>${k === 'cheki' && d.venue ? ` ／ ${esc(d.venue)}` : ''}${d.costume ? ` ／ 衣装: ${esc(d.costume)}` : ''} ／ チェキ ${chekiSum(d)}枚</span>
         ${partHTML(d, partsOf(d)[0], deleted, false).replace(/<details><summary>セットリスト[\s\S]*?<\/details>/, '')}
-        ${d.memo && !deleted ? `<div class="memo">${esc(d.memo)}</div>` : ''}
+        ${deleted ? '' : memoHTML(d)}
       </div>
       <div class="btns">${btns}</div>
     </article>`;
@@ -1606,7 +1619,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     const cheki = (d.chekiDetails || []).map(c => `${esc(c.name)}×${c.count}`).join('、');
     const btns = deleted
       ? `<button class="btn sm" data-act="restore" data-id="${esc(d.id)}">復元</button><button class="btn sm danger" data-act="purge" data-id="${esc(d.id)}">完全に削除</button>`
-      : `<button class="btn sm" data-act="edit" data-id="${esc(d.id)}">編集</button><button class="btn sm" data-act="copy" data-id="${esc(d.id)}">コピー</button><button class="btn sm danger" data-act="delete" data-id="${esc(d.id)}">削除</button>`;
+      : `<a class="btn sm" href="${esc(xSearchURL(d.group, d.date))}" target="_blank" rel="noopener">Xでセトリを探す</a><button class="btn sm" data-act="edit" data-id="${esc(d.id)}">編集</button><button class="btn sm" data-act="copy" data-id="${esc(d.id)}">コピー</button><button class="btn sm danger" data-act="delete" data-id="${esc(d.id)}">削除</button>`;
     return `<article class="live">
       <div class="meta">
         <span class="date">${esc(d.date)}</span>
@@ -1617,11 +1630,33 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
         ${cheki ? `<span class="sub">チェキ: ${cheki}</span>` : ''}
         ${!deleted && d.chekiTweets && d.chekiTweets.length ? `<details class="tweets"><summary>チェキツイート（${d.chekiTweets.length}件）</summary><div class="tweet-embeds">${d.chekiTweets.map(t => `<a href="${esc(t.url)}" target="_blank" rel="noopener" data-tweet="${esc(tweetId(t.url))}">${esc(t.text ? (t.text.length > 60 ? t.text.slice(0, 60) + '…' : t.text) : t.url)}</a>`).join('')}</div></details>` : ''}
         ${deleted ? '' : `<details><summary>セットリスト（${songs.length}曲）</summary><ol>${songs.map(s => `<li>${esc(s)}</li>`).join('')}</ol></details>`}
-        ${d.memo && !deleted ? `<div class="memo">${esc(d.memo)}</div>` : ''}
+        ${deleted ? '' : memoHTML(d)}
       </div>
       <div class="btns">${btns}</div>
     </article>`;
   }
+  // メモのうち TimeTree から取り込んだ部分は、たたんで表示する
+  function memoHTML(d) {
+    const memo = String(d.memo || '');
+    if (!memo) return '';
+    const m = d.timetreeId ? memo.match(/^([\s\S]*?)TimeTree:\s*(https?:\/\/\S+)[^\n]*\n?/) : null;
+    if (!m) return `<div class="memo">${esc(memo)}</div>`;
+    const info = m[1].trim(), rest = memo.slice(m[0].length).trim();
+    return `<details class="ttinfo"><summary>TimeTreeの情報</summary>${info ? `<div class="memo">${esc(info)}</div>` : ''}<a href="${esc(m[2])}" target="_blank" rel="noopener">TimeTreeで開く</a></details>`
+      + (rest ? `<div class="memo">${esc(rest)}</div>` : '');
+  }
+  // X でセトリのハッシュタグを探すURL（日付があればその日と翌日の投稿に絞る）
+  function xSearchURL(group, date) {
+    const tags = (cand.setoriTags[group] || []).map(t => '#' + t);
+    let q = tags.length ? (tags.length > 1 ? `(${tags.join(' OR ')})` : tags[0]) : (group ? `"${group}" セトリ` : 'セトリ');
+    if (/^\d{4}-\d{2}-\d{2}$/.test(date || '')) {
+      const next2 = new Date(Date.parse(date + 'T00:00:00Z') + 2 * 86400000).toISOString().slice(0, 10);
+      q += ` since:${date} until:${next2}`;
+    }
+    return 'https://x.com/search?f=live&q=' + encodeURIComponent(q);
+  }
+  function updateXSearchBtn() { $('xSearchBtn').href = xSearchURL(curGroup(), F.date.value); }
+  $('xSearchBtn').addEventListener('click', updateXSearchBtn); // 押した時点のグループ・日付で検索
   function memberLine(d) {
     const l = lineupMap.get(liveLineup.get(d.id));
     const ms = d.members || [];
@@ -2106,6 +2141,10 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     $('lmAccounts').innerHTML = accs.length
       ? accs.map(a => `<span class="chip">@${esc(a)}<button type="button" data-lmdelacc="${esc(a)}" aria-label="@${esc(a)}を削除">×</button></span>`).join('')
       : '<p class="empty">まだ登録されていません</p>';
+    const tags = cand.setoriTags[g] || [];
+    $('lmTags').innerHTML = tags.length
+      ? tags.map(a => `<span class="chip">#${esc(a)}<button type="button" data-lmdeltag="${esc(a)}" aria-label="#${esc(a)}を削除">×</button></span>`).join('')
+      : '<p class="empty">まだ登録されていません</p>';
     const cals = calsOf(g);
     $('lmCals').innerHTML = cals.length
       ? cals.map(a => `<span class="chip">${esc(a)}<button type="button" data-lmdelcal="${esc(a)}" aria-label="${esc(a)}を削除">×</button></span>`).join('')
@@ -2119,6 +2158,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     renderLmForm();
   }
   $('lmGroup').addEventListener('change', () => { resetLmForm(); renderLineupManage(); });
+  $('lmTagIn').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) $('lmTagAdd').click(); });
   $('lmCalIn').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) $('lmCalAdd').click(); });
   $('lmAccountIn').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) $('lmAccountAdd').click(); });
   $('lmMemberIn').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) $('lmMemberAdd').click(); });
@@ -2136,6 +2176,22 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       if (other === g) return toast('すでに登録されています');
       if (other && !await confirmBox(`@${a} は「${other}」に登録されています。「${g}」に変更しますか？`)) return;
       cand.accounts[a] = g; $('lmAccountIn').value = ''; Store.saveCandidates(); toast(`@${a} を登録しました`);
+      return;
+    }
+    if (t.id === 'lmTagAdd') {
+      const list = $('lmTagIn').value.split(/[\s、,，]+/).map(x => x.replace(/^[#＃]+/, '').trim()).filter(Boolean);
+      if (!list.length) return toast('ハッシュタグを入力してください', 'error');
+      const cur = cand.setoriTags[g] || [];
+      const added = list.filter(x => !cur.includes(x));
+      if (!added.length) return toast('すでに登録されています');
+      cand.setoriTags[g] = [...cur, ...added]; $('lmTagIn').value = ''; Store.saveCandidates(); toast(`#${added.join('、#')} を登録しました`);
+      return;
+    }
+    if (t.dataset.lmdeltag) {
+      const a = t.dataset.lmdeltag;
+      cand.setoriTags[g] = (cand.setoriTags[g] || []).filter(x => x !== a);
+      if (!cand.setoriTags[g].length) delete cand.setoriTags[g];
+      Store.saveCandidates(); toast(`#${a} を外しました`);
       return;
     }
     if (t.id === 'lmCalAdd') {
@@ -2350,6 +2406,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       cand.lineups.forEach(l => { if (F.has(l.group)) l.group = to; });
       Object.keys(cand.accounts).forEach(a => { if (F.has(cand.accounts[a])) cand.accounts[a] = to; });
       Object.keys(cand.timetree.cals).forEach(a => { if (F.has(cand.timetree.cals[a])) cand.timetree.cals[a] = to; });
+      F.forEach(f => { if (f !== to && cand.setoriTags[f]) { cand.setoriTags[to] = [...new Set([...(cand.setoriTags[to] || []), ...cand.setoriTags[f]])]; delete cand.setoriTags[f]; } });
     } else if (!isScoped(k)) {
       froms.forEach(f => cand[k].delete(f)); cand[k].add(to);
     } else {
@@ -2406,7 +2463,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       const pics = isGroup ? costumeImgs.filter(x => x.group === item) : k === 'costume' ? imgsOf(g, item) : [];
       if (!await confirmBox(`「${item}」を候補から削除しますか？${isGroup ? '（このグループの体制・メンバー・楽曲・衣装・チェキ相手の候補も消えます）' : ''}${pics.length ? `\n衣装の写真${pics.length}枚も削除されます。` : ''}`)) return;
       for (const x of pics) await Store.deleteCostumeImage(x.id);
-      if (isGroup) { cand.groups.delete(item); KINDS.forEach(kind => cand[kind].delete(item)); cand.lineups = cand.lineups.filter(l => l.group !== item); Object.keys(cand.accounts).forEach(a => { if (cand.accounts[a] === item) delete cand.accounts[a]; }); Object.keys(cand.timetree.cals).forEach(a => { if (cand.timetree.cals[a] === item) delete cand.timetree.cals[a]; }); }
+      if (isGroup) { cand.groups.delete(item); KINDS.forEach(kind => cand[kind].delete(item)); cand.lineups = cand.lineups.filter(l => l.group !== item); Object.keys(cand.accounts).forEach(a => { if (cand.accounts[a] === item) delete cand.accounts[a]; }); Object.keys(cand.timetree.cals).forEach(a => { if (cand.timetree.cals[a] === item) delete cand.timetree.cals[a]; }); delete cand.setoriTags[item]; }
       else if (isScoped(k)) cand[k].get(g)?.delete(item);
       else cand[k].delete(item);
       await Store.saveCandidates();
@@ -3155,6 +3212,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     renderCostumePreview();
     renderImgModal();
     renderTTGroups();
+    updateXSearchBtn();
   }
 
   // 初期表示
