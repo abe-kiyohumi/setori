@@ -270,6 +270,24 @@ body.scope-all .top { box-shadow: inset 0 -3px 0 var(--warn-soft); }
   .ttinfo > summary { cursor: pointer; color: var(--muted); }
   .ttinfo a { display: inline-block; margin-top: 4px; color: var(--accent); }
   a.btn { text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
+  .xtag-box { margin-top: 10px; padding: 10px; border: 1px dashed var(--line); border-radius: var(--r); display: flex; flex-direction: column; gap: 6px; }
+  .xtag-box .chips a.chip { text-decoration: none; color: var(--accent); cursor: pointer; }
+  .cal-head { display: flex; gap: 6px; align-items: center; margin: 8px 0; }
+  .cal-head input { max-width: 170px; }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+  .cal-grid .dow { text-align: center; font-size: .75rem; color: var(--muted); padding: 2px 0; }
+  .cal-grid .dow.sun, .cal-day.sun .n { color: var(--danger); }
+  .cal-grid .dow.sat, .cal-day.sat .n { color: #2f6fc2; }
+  .cal-day { min-height: 44px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 2px 4px; display: flex; flex-direction: column; align-items: flex-start; font: inherit; color: var(--ink); cursor: pointer; }
+  .cal-day.empty { visibility: hidden; }
+  .cal-day.none { opacity: .45; cursor: default; }
+  .cal-day.today { outline: 2px solid var(--accent-soft); }
+  .cal-day.sel { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .cal-day.sel .n { color: var(--accent-ink); }
+  .cal-day .n { font-size: .8rem; }
+  .cal-day .c { align-self: center; margin-top: 2px; font-size: .72rem; font-weight: 700; padding: 0 6px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
+  .cal-day .c.fut { background: var(--surface-2); color: var(--muted); }
+  .cal-day.sel .c { background: var(--accent-ink); color: var(--accent); }
 </style>
 </head>
 <body class="signed-out">
@@ -331,6 +349,15 @@ body.scope-all .top { box-shadow: inset 0 -3px 0 var(--warn-soft); }
           <a id="xSearchBtn" class="btn" href="https://x.com/search" target="_blank" rel="noopener">Xでセトリを探す</a>
         </div>
         <div id="tweetLoaded" class="chips" style="margin-top:6px"></div>
+        <div class="xtag-box">
+          <span class="lbl" style="margin:0">ハッシュタグでXを検索</span>
+          <div id="xTagChips" class="chips"></div>
+          <div class="row" style="flex-wrap:wrap">
+            <div class="grow"><input id="xTagIn" class="field" placeholder="#ハッシュタグ（例：#手羽セトリ）"></div>
+            <button type="button" id="xTagGo" class="btn">検索</button>
+          </div>
+          <label class="hint"><input type="checkbox" id="xTagDate" checked> フォームの日付（その日と翌日）で絞る</label>
+        </div>
       </div>
       <details id="tweetTextBox">
         <summary class="hint" style="cursor:pointer">ツイート本文（貼り付け・確認用。複数のツイートは「---」だけの行で区切ります）</summary>
@@ -446,7 +473,8 @@ body.scope-all .top { box-shadow: inset 0 -3px 0 var(--warn-soft); }
         </div>
       </div>
 
-      <div><label class="lbl" for="liveMemo">ライブメモ</label><textarea id="liveMemo" class="field" rows="3" placeholder="感想・特典会のことなど"></textarea></div>
+      <div><label class="lbl" for="liveMemo">ライブメモ</label><textarea id="liveMemo" class="field" rows="3" placeholder="感想・特典会のことなど"></textarea>
+        <details id="ttFormInfo" class="ttinfo" hidden><summary>TimeTreeの情報（保存してもそのまま残ります）</summary><div class="memo" id="ttFormInfoText"></div></details></div>
 
       <div class="actions">
         <button type="submit" id="submitButton" class="btn primary">保存する</button>
@@ -527,6 +555,21 @@ body.scope-all .top { box-shadow: inset 0 -3px 0 var(--warn-soft); }
       <div class="row" style="align-items:center"><span class="hint">参加:</span><button type="button" class="btn sm" data-bulk-att="yes">選択したライブを「行った」にする</button><button type="button" class="btn sm" data-bulk-att="no">「行っていない」にする</button></div>
       <p class="hint">上の「絞り込み」で、例えば「ライブの種類:（未設定）」にしてから「表示中をすべて選択」すると、種類が空のライブにまとめて設定できます。</p>
     </div>
+    <details id="calPanel" class="panel" open>
+      <summary style="cursor:pointer"><b>カレンダーから探す</b> <span id="calPicked" class="hint"></span></summary>
+      <div class="cal-head">
+        <button type="button" class="btn sm" id="calPrev" aria-label="前の月">‹</button>
+        <input type="month" id="calMonth" class="field">
+        <button type="button" class="btn sm" id="calNext" aria-label="次の月">›</button>
+        <button type="button" class="btn sm" id="calToday">今月</button>
+      </div>
+      <div class="cal-grid" id="calGrid"></div>
+      <div class="row" style="flex-wrap:wrap;align-items:center;margin-top:8px">
+        <label class="hint"><input type="checkbox" id="hideFuture"> これからのライブ（明日以降）を一覧に出さない</label>
+        <button type="button" class="btn sm" id="calClear" hidden>日付の選択を外す</button>
+      </div>
+      <p class="hint">日付を押すとその日のライブだけを表示します。数字はその日のライブ数です。</p>
+    </details>
     <details id="mergePanel" class="panel inset" hidden>
       <summary style="cursor:pointer"><b id="mergeTitle">同じ日のライブをまとめる</b></summary>
       <p class="hint">同じ日・同じグループで別々に記録されているライブです。「1つにまとめる」を押すと、1つのライブの中のステージ・部として記録し直します（セトリ・衣装・チェキはステージごとに残ります）。</p>
@@ -759,11 +802,15 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   let formParts = [emptyPartSafe()], activePart = 0;
   function emptyPartSafe() { return { label: '', costume: '', setlist: '', chekiDetails: [], chekiTweets: [] }; }
   let tweetPostDate = ''; // URLから読み込んだツイートの投稿日
+  let formTT = null;      // 編集中のライブの TimeTree 情報 { block, id, cal }
   let tweetAccount = '';  // URLから読み込んだツイートのアカウント（小文字・@なし）
   let lineupWhy = '';     // 体制を自動で選んだ理由
   let costumeImgs = [];   // { id, group, costume, thumb, createdAt }
   let currentLineup = '', lineupManual = false;
   let editingId = null, fYear = 'all', fGroup = 'all', fLineup = 'all', sortOrder = 'desc';
+  let hideFuture = false, calMonth = '';
+  try { hideFuture = localStorage.getItem('setori-hide-future') === '1'; } catch (e) { }
+  const todayStr = () => new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
   let fKind = 'all', fType = 'all', fFrom = '', fTo = '', fSong = '', fVenue = '', fCostume = '', fMember = '';
   let lineupMap = new Map();        // key → 体制（名前・期間付き）
   let liveLineup = new Map();       // ライブID → 体制key
@@ -1506,9 +1553,10 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       date: F.date.value, liveName: F.name.value.trim(), liveType: live ? F.type.value.trim() : '',
       venue: kind === 'online' ? '' : F.venue.value.trim(), group: F.group.value.trim(),
       members: live ? [...currentMembers] : [], lineup: live ? (currentLineup || '') : '',
-      memo: F.memo.value.trim(),
+      memo: [formTT ? formTT.block : '', F.memo.value.trim()].filter(Boolean).join('\n'),
       createdAt: old?.createdAt || Date.now(), updatedAt: Date.now(),
     }, parts.length ? parts : [emptyPartSafe()]);
+    if (formTT && formTT.id) { entry.timetreeId = formTT.id; if (formTT.cal) entry.timetreeCal = formTT.cal; }
     if (!live) { entry.setlist = ''; delete entry.parts; }
     const missing = [['日付', entry.date], ['グループ', entry.group], live ? ['セットリスト', entry.setlist] : ['チェキ（相手と枚数）', entry.chekiDetails.length]]
       .filter(([, v]) => !v).map(([k]) => k);
@@ -1519,12 +1567,25 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       cand.accounts[tweetAccount] = entry.group; Store.saveCandidates();
       learned = `。@${tweetAccount} を「${entry.group}」のアカウントとして覚えました`;
     }
+    if (live && entry.group) { // セトリのツイートに付いていた「セトリ」のハッシュタグを覚える
+      const tags = [...new Set([...$('tweetText').value.matchAll(/[#＃]([^\s#＃]+)/g)].map(m => m[1]).filter(t => /セトリ|せとり|setlist|setori/i.test(t)))];
+      const cur = cand.setoriTags[entry.group] || [];
+      const add = tags.filter(t => !cur.includes(t));
+      if (add.length) { cand.setoriTags[entry.group] = [...cur, ...add]; Store.saveCandidates(); learned += `。#${add.join('、#')} をセトリ用ハッシュタグとして覚えました`; }
+    }
     resetForm();
     Store.putLive(entry); toast((wasEdit ? '更新しました' : '保存しました') + learned);
   });
   $('cancelEditButton').addEventListener('click', () => { resetForm(); toast('編集をやめました'); });
 
+  function showFormTT() {
+    const box = $('ttFormInfo');
+    box.hidden = !(formTT && formTT.block); box.open = false;
+    $('ttFormInfoText').textContent = formTT ? formTT.block : '';
+  }
+  const ttIdFromUrl = u => { const m = String(u || '').match(/timetr\.ee\/p\/[^/\s]+\/([^/?#\s]+)/); return m ? m[1] : ''; };
   function resetForm() {
+    formTT = null; showFormTT();
     $('liveEntryForm').reset();
     currentCheki = []; currentMembers = []; currentLineup = ''; lineupManual = false; currentChekiTweets = []; renderChekiTweets();
     tweetAccount = ''; lastFetched = ''; currentHints = []; renderHints([]); $('parseResult').hidden = true; $('tweetUrl').value = ''; $('tweetText').value = '';
@@ -1543,7 +1604,11 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     const d = liveData.find(x => x.id === id);
     if (!d) return;
     F.date.value = d.date || ''; F.type.value = d.liveType || ''; F.name.value = d.liveName || '';
-    F.venue.value = d.venue || ''; F.group.value = d.group || ''; F.memo.value = d.memo || '';
+    F.venue.value = d.venue || ''; F.group.value = d.group || '';
+    const tm = splitTTMemo(d.memo);
+    formTT = tm ? { block: tm.block, id: d.timetreeId || ttIdFromUrl(tm.url), cal: d.timetreeCal || '' } : (d.timetreeId ? { block: '', id: d.timetreeId, cal: d.timetreeCal || '' } : null);
+    F.memo.value = tm ? tm.rest : (d.memo || '');
+    showFormTT();
     currentMembers = [...(d.members || [])];
     formParts = clone(partsOf(d)); loadPartToForm(0);
     $('liveAttended').checked = attended(d);
@@ -1566,6 +1631,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       && (fKind === 'all' || kindOf(d) === fKind)
       && (fType === 'all' || (fType === '__none' ? !d.liveType : d.liveType === fType))
       && (!fFrom || (d.date || '') >= fFrom) && (!fTo || (d.date || '') <= fTo)
+      && (!hideFuture || fFrom === fTo && fFrom || (d.date || '') <= todayStr())
       && has(d.venue, fVenue) && (!fCostume || partsOf(d).some(p => has(p.costume, fCostume)))
       && (!fSong || partsOf(d).some(p => splitSongs(p.setlist).some(x => has(x, fSong))))
       && (!fMember || (d.members || []).some(x => has(x, fMember))));
@@ -1636,18 +1702,25 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     </article>`;
   }
   // メモのうち TimeTree から取り込んだ部分は、たたんで表示する
+  // メモを「TimeTreeから取り込んだ部分」と「自分のメモ」に分ける
+  function splitTTMemo(memo) {
+    memo = String(memo || '');
+    const m = memo.match(/^([\s\S]*?)TimeTree:\s*(https?:\/\/(?:timetr\.ee|timetreeapp\.com)\S*)[^\n]*\n?/);
+    if (!m) return null;
+    return { block: m[0].trim(), info: m[1].trim(), url: m[2], rest: memo.slice(m[0].length).trim() };
+  }
   function memoHTML(d) {
     const memo = String(d.memo || '');
     if (!memo) return '';
-    const m = d.timetreeId ? memo.match(/^([\s\S]*?)TimeTree:\s*(https?:\/\/\S+)[^\n]*\n?/) : null;
+    const m = splitTTMemo(memo);
     if (!m) return `<div class="memo">${esc(memo)}</div>`;
-    const info = m[1].trim(), rest = memo.slice(m[0].length).trim();
-    return `<details class="ttinfo"><summary>TimeTreeの情報</summary>${info ? `<div class="memo">${esc(info)}</div>` : ''}<a href="${esc(m[2])}" target="_blank" rel="noopener">TimeTreeで開く</a></details>`
+    const info = m.info, rest = m.rest;
+    return `<details class="ttinfo"><summary>TimeTreeの情報</summary>${info ? `<div class="memo">${esc(info)}</div>` : ''}<a href="${esc(m.url)}" target="_blank" rel="noopener">TimeTreeで開く</a></details>`
       + (rest ? `<div class="memo">${esc(rest)}</div>` : '');
   }
   // X でセトリのハッシュタグを探すURL（日付があればその日と翌日の投稿に絞る）
-  function xSearchURL(group, date) {
-    const tags = (cand.setoriTags[group] || []).map(t => '#' + t);
+  function xSearchURL(group, date, only) {
+    const tags = (only ? [only] : (cand.setoriTags[group] || [])).map(t => '#' + t);
     let q = tags.length ? (tags.length > 1 ? `(${tags.join(' OR ')})` : tags[0]) : (group ? `"${group}" セトリ` : 'セトリ');
     if (/^\d{4}-\d{2}-\d{2}$/.test(date || '')) {
       const next2 = new Date(Date.parse(date + 'T00:00:00Z') + 2 * 86400000).toISOString().slice(0, 10);
@@ -1655,7 +1728,33 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     }
     return 'https://x.com/search?f=live&q=' + encodeURIComponent(q);
   }
-  function updateXSearchBtn() { $('xSearchBtn').href = xSearchURL(curGroup(), F.date.value); }
+  function updateXSearchBtn() { $('xSearchBtn').href = xSearchURL(curGroup(), F.date.value); renderXTags(); }
+  const xTagDate = () => $('xTagDate').checked ? F.date.value : '';
+  function renderXTags() {
+    const g = curGroup(), tags = cand.setoriTags[g] || [];
+    $('xTagChips').innerHTML = tags.length
+      ? tags.map(t => `<a class="chip" data-xtag="${esc(t)}" href="${esc(xSearchURL(g, xTagDate(), t))}" target="_blank" rel="noopener">#${esc(t)}</a>`).join('')
+      : `<span class="hint">${g ? `「${esc(g)}」のセトリ用ハッシュタグはまだありません。下に入れて検索するか、候補の管理で登録してください。` : 'グループを入れると、登録したハッシュタグがここに出ます。'}</span>`;
+  }
+  $('xTagChips').addEventListener('click', e => { const a = e.target.closest('a[data-xtag]'); if (a) a.href = xSearchURL(curGroup(), xTagDate(), a.dataset.xtag); });
+  $('xTagDate').addEventListener('change', renderXTags);
+  F.group.addEventListener('input', renderXTags); F.group.addEventListener('change', renderXTags); F.date.addEventListener('change', renderXTags);
+  function xTagSearch() {
+    const tags = $('xTagIn').value.split(/[\s、,，]+/).map(x => x.replace(/^[#＃]+/, '').trim()).filter(Boolean);
+    if (!tags.length) return toast('ハッシュタグを入力してください', 'error');
+    let q = tags.map(t => '#' + t).join(tags.length > 1 ? ' OR ' : '');
+    if (tags.length > 1) q = `(${q})`;
+    const d = xTagDate();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(d)) q += ` since:${d} until:${new Date(Date.parse(d + 'T00:00:00Z') + 2 * 86400000).toISOString().slice(0, 10)}`;
+    window.open('https://x.com/search?f=live&q=' + encodeURIComponent(q), '_blank', 'noopener');
+    const g = curGroup();
+    const cur = cand.setoriTags[g] || [];
+    const add = tags.filter(t => !cur.includes(t));
+    if (g && add.length) { cand.setoriTags[g] = [...cur, ...add]; Store.saveCandidates(); toast(`#${add.join('、#')} を「${g}」のセトリ用ハッシュタグとして登録しました`); }
+    $('xTagIn').value = '';
+  }
+  $('xTagGo').addEventListener('click', xTagSearch);
+  $('xTagIn').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); xTagSearch(); } });
   $('xSearchBtn').addEventListener('click', updateXSearchBtn); // 押した時点のグループ・日付で検索
   function memberLine(d) {
     const l = lineupMap.get(liveLineup.get(d.id));
@@ -3156,7 +3255,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       $('ttMsg').textContent = `読み込み中…（${targets.findIndex(t => t[0] === alias) + 1}/${targets.length}）`;
     }
     const byTT = new Map(), deletedTT = new Set();
-    liveData.forEach(d => { if (d.timetreeId) byTT.set(String(d.timetreeId), d); });
+    liveData.forEach(d => { const id = d.timetreeId || ttIdFromUrl((splitTTMemo(d.memo) || {}).url); if (id) byTT.set(String(id), d); });
     deletedLiveData.forEach(d => { if (d.timetreeId) deletedTT.add(String(d.timetreeId)); });
     ttEvents.forEach(x => {
       const id = String(x.ev.id);
@@ -3200,11 +3299,53 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     finally { renderTTList(); }
   });
 
+
+  // ================= カレンダー（一覧） =================
+  function renderCalendar() {
+    if (!calMonth) {
+      calMonth = (fFrom && fFrom === fTo ? fFrom : todayStr()).slice(0, 7);
+    }
+    $('calMonth').value = calMonth;
+    $('hideFuture').checked = hideFuture;
+    const keep = [fFrom, fTo, hideFuture];
+    fFrom = fTo = ''; hideFuture = false;
+    const counts = {};
+    filtered().forEach(d => { if (d.date) counts[d.date] = (counts[d.date] || 0) + 1; });
+    [fFrom, fTo, hideFuture] = keep;
+    const [y, m] = calMonth.split('-').map(Number);
+    const first = new Date(Date.UTC(y, m - 1, 1)), days = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    const lead = first.getUTCDay(), today = todayStr(), sel = fFrom && fFrom === fTo ? fFrom : '';
+    let html = ['日', '月', '火', '水', '木', '金', '土'].map((w, i) => `<div class="dow${i === 0 ? ' sun' : i === 6 ? ' sat' : ''}">${w}</div>`).join('');
+    for (let i = 0; i < lead; i++) html += '<div class="cal-day empty"></div>';
+    for (let d = 1; d <= days; d++) {
+      const ds = `${calMonth}-${String(d).padStart(2, '0')}`, n = counts[ds] || 0, w = (lead + d - 1) % 7;
+      html += `<button type="button" class="cal-day${w === 0 ? ' sun' : w === 6 ? ' sat' : ''}${n ? '' : ' none'}${ds === today ? ' today' : ''}${ds === sel ? ' sel' : ''}" data-cal="${ds}" ${n ? '' : 'tabindex="-1"'} aria-label="${m}月${d}日 ${n}件"><span class="n">${d}</span>${n ? `<span class="c${ds > today ? ' fut' : ''}">${n}</span>` : ''}</button>`;
+    }
+    $('calGrid').innerHTML = html;
+    const monthTotal = Object.entries(counts).filter(([k]) => k.startsWith(calMonth)).reduce((a, [, v]) => a + v, 0);
+    $('calPicked').textContent = sel ? `${fmtDate(sel)} を表示中` : `${y}年${m}月：${monthTotal}件`;
+    $('calClear').hidden = !sel;
+  }
+  const shiftMonth = k => { const [y, m] = calMonth.split('-').map(Number); const d = new Date(Date.UTC(y, m - 1 + k, 1)); calMonth = d.toISOString().slice(0, 7); renderCalendar(); };
+  $('calPrev').addEventListener('click', () => shiftMonth(-1));
+  $('calNext').addEventListener('click', () => shiftMonth(1));
+  $('calToday').addEventListener('click', () => { calMonth = todayStr().slice(0, 7); renderCalendar(); });
+  $('calMonth').addEventListener('change', e => { if (/^\d{4}-\d{2}$/.test(e.target.value)) { calMonth = e.target.value; renderCalendar(); } });
+  const setDay = ds => { fFrom = fTo = ds; $('fromFilter').value = $('toFilter').value = ds; if (ds) fYear = 'all'; renderAll(); };
+  $('calGrid').addEventListener('click', e => {
+    const b = e.target.closest('[data-cal]');
+    if (!b || b.classList.contains('none')) return;
+    setDay(fFrom === b.dataset.cal && fTo === b.dataset.cal ? '' : b.dataset.cal);
+  });
+  $('calClear').addEventListener('click', () => setDay(''));
+  $('hideFuture').addEventListener('change', e => { hideFuture = e.target.checked; try { localStorage.setItem('setori-hide-future', hideFuture ? '1' : '0'); } catch (err) { } renderAll(); });
+
   // ================= 描画まとめ =================
   function renderAll() {
     rebuildView();
     populateFilters();
     renderList();
+    renderCalendar();
     renderRankings();
     renderManage();
     renderChekiBulk();
