@@ -299,13 +299,21 @@ body.scope-all .top { box-shadow: inset 0 -3px 0 var(--warn-soft); }
   .to-top[hidden] { display: none; }
   .to-top.raised { bottom: calc(86px + env(safe-area-inset-bottom, 0px)); }
   .to-top:focus-visible { outline: 3px solid var(--accent-soft); outline-offset: 2px; }
+  .ver-badge { font: 600 .72rem var(--f-body); vertical-align: middle; margin-left: 4px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface-2); color: var(--muted); cursor: pointer; }
+  .ver-badge:hover { color: var(--accent); border-color: var(--accent); }
+  .ver-list { display: flex; flex-direction: column; gap: 14px; }
+  .ver-item h3 { margin: 0 0 4px; font-size: 1rem; }
+  .ver-item h3 .d { font-weight: 400; font-size: .8rem; color: var(--muted); margin-left: 6px; }
+  .ver-item h3 .now { font-size: .7rem; margin-left: 6px; padding: 1px 6px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
+  .ver-item ul { margin: 0; padding-left: 1.2em; }
+  .ver-item li { margin: 2px 0; }
 </style>
 </head>
 <body class="signed-out">
 <header class="top">
   <div class="wrap">
     <div class="brand">
-      <h1>セトリ記録帳</h1>
+      <h1>セトリ記録帳 <button type="button" id="verBtn" class="ver-badge" aria-label="バージョンと更新履歴">ver <span id="verNum"></span></button></h1>
       <div class="row" style="align-items:center">
         <span id="syncStatus" class="sync">接続中…</span>
         <span id="userName" class="hint"></span>
@@ -729,6 +737,15 @@ body.scope-all .top { box-shadow: inset 0 -3px 0 var(--warn-soft); }
   <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M12 5l-7 7m7-7l7 7M12 5v14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
 </button>
 
+<div id="verModal" class="modal" hidden>
+  <div class="box" role="dialog" aria-modal="true" aria-labelledby="verTitle" style="max-height:85vh;overflow:auto">
+    <div class="row" style="justify-content:space-between;align-items:center">
+      <h2 id="verTitle" style="margin:0">更新履歴</h2>
+      <button type="button" id="verClose" class="btn sm">閉じる</button>
+    </div>
+    <div id="verList" class="ver-list"></div>
+  </div>
+</div>
 <div id="confirmModal" class="modal" hidden>
   <div class="box" role="dialog" aria-modal="true">
     <p id="confirmMessage"></p>
@@ -3389,6 +3406,74 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   });
   $('calClear').addEventListener('click', () => setDay(''));
   $('hideFuture').addEventListener('change', e => { hideFuture = e.target.checked; try { localStorage.setItem('setori-hide-future', hideFuture ? '1' : '0'); } catch (err) { } renderAll(); });
+
+
+  // ================= バージョン・更新履歴 =================
+  // 新しい機能を追加したら、いちばん上に1件足して番号を上げる
+  const VERSIONS = [
+    { v: '2.3', date: '2026/11/12', items: [
+      'タイトルの横にバージョンを表示（押すとこの更新履歴）',
+      '画面の右下に「いちばん上に戻る」ボタン',
+      'TimeTreeの取り込みで「1日だけ」を選べるように（グループ1つ×1日）',
+      '「Xで探す」に、登録したハッシュタグとグループのXアカウントをグループを選ばなくても一覧表示',
+      'ライブ一覧のメモの中のURL（元ツイートなど）を押して開けるように',
+    ] },
+    { v: '2.2', date: '2026/11/12', items: [
+      'ライブ一覧に「カレンダーから探す」（日付を押すとその日のライブだけ表示）',
+      '「これからのライブ（明日以降）を一覧に出さない」設定',
+      '編集して保存してもTimeTreeの情報が閉じたまま残るように',
+    ] },
+    { v: '2.1', date: '2026/11/12', items: [
+      'TimeTreeの情報をライブ一覧でたたんで表示',
+      '「Xでセトリを探す」：セトリ用ハッシュタグでXを検索（日付で絞り込み）',
+      'グループごとのセトリ用ハッシュタグを登録・自動で覚える',
+    ] },
+    { v: '2.0', date: '2026/11/6', items: [
+      'TimeTreeの公開カレンダーからライブ予定を取り込み（中継サーバー経由）',
+      'グループごとにTimeTreeカレンダーを登録',
+    ] },
+    { v: '1.4', date: '2026年10月〜11月上旬', items: [
+      'ツイートを複数まとめて読み込み、ライブ名などの候補に',
+      '「自分が行ったライブ」と「グループ全体」の切り替え',
+      'ライブの種類・会場などの一括変更',
+      'カバー曲を「曲名(カバー)」にそろえ、ランキングでは下に表示',
+      'ツイートの「さらに表示」の部分まで全文を読み込み',
+    ] },
+    { v: '1.3', date: '2026年10月〜11月上旬', items: [
+      '1日のライブをステージごとに分けて記録（セトリ・衣装・チェキ）',
+      'チェキ会のみ・オンラインチェキの記録',
+      'チェキ一括（人ごとにまとめて入力）',
+      '同じ日のライブを1つにまとめる',
+      'スマホのホーム画面にアプリとして追加',
+    ] },
+    { v: '1.2', date: '2026年10月〜11月上旬', items: [
+      'ツイートのURLだけで読み込み、アカウントからグループを判別',
+      '衣装の写真を保存して確認',
+      'メールアドレス＋パスワードでのログイン',
+    ] },
+    { v: '1.1', date: '2026年10月〜11月上旬', items: [
+      'グループの体制（メンバー構成）ごとの記録と管理',
+      'チェキツイートの登録',
+      '日付・種類・曲・体制・会場・衣装などで一覧とランキングを絞り込み',
+      '候補の管理で、表記ゆれ（大文字小文字・スペース）をまとめて修正',
+    ] },
+    { v: '1.0', date: '2026年10月', items: [
+      'ライブの記録（日付・ライブ名・種類・会場・グループ・メンバー・衣装・セトリ・チェキ・メモ）',
+      'どの機器からでも同じデータを使えるクラウド保存',
+      'Xのセトリツイートを貼り付けて読み込み',
+      '入力の候補表示とランキング',
+      '2024〜2026年のExcelのセトリを取り込み',
+    ] },
+  ];
+  const APP_VERSION = VERSIONS[0].v;
+  $('verNum').textContent = APP_VERSION;
+  $('verBtn').addEventListener('click', () => {
+    $('verList').innerHTML = VERSIONS.map((x, i) => `<div class="ver-item"><h3>ver ${esc(x.v)}<span class="d">${esc(x.date)}</span>${i === 0 ? '<span class="now">いまのバージョン</span>' : ''}</h3><ul>${x.items.map(t => `<li>${esc(t)}</li>`).join('')}</ul></div>`).join('');
+    $('verModal').hidden = false;
+  });
+  $('verClose').addEventListener('click', () => { $('verModal').hidden = true; });
+  $('verModal').addEventListener('click', e => { if (e.target === $('verModal')) $('verModal').hidden = true; });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('verModal').hidden) $('verModal').hidden = true; });
 
   // ================= 描画まとめ =================
   function renderAll() {
