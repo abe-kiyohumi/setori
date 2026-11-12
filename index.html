@@ -271,7 +271,13 @@ body.scope-all .top { box-shadow: inset 0 -3px 0 var(--warn-soft); }
   .ttinfo a { display: inline-block; margin-top: 4px; color: var(--accent); }
   a.btn { text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
   .xtag-box { margin-top: 10px; padding: 10px; border: 1px dashed var(--line); border-radius: var(--r); display: flex; flex-direction: column; gap: 6px; }
-  .xtag-box .chips a.chip { text-decoration: none; color: var(--accent); cursor: pointer; }
+  .xtag-box .chips { flex-direction: column; align-items: stretch; }
+  .xtag-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 4px 0; border-bottom: 1px solid var(--line); }
+  .xtag-row:last-child { border-bottom: 0; }
+  .xtag-row.cur .xtag-g { color: var(--accent); }
+  .xtag-g { font-size: .8rem; font-weight: 700; color: var(--muted); margin-right: 2px; }
+  .xtag-box a.chip { text-decoration: none; color: var(--accent); cursor: pointer; }
+  .xtag-box a.chip.acc { color: var(--ink); }
   .cal-head { display: flex; gap: 6px; align-items: center; margin: 8px 0; }
   .cal-head input { max-width: 170px; }
   .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
@@ -288,6 +294,7 @@ body.scope-all .top { box-shadow: inset 0 -3px 0 var(--warn-soft); }
   .cal-day .c { align-self: center; margin-top: 2px; font-size: .72rem; font-weight: 700; padding: 0 6px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
   .cal-day .c.fut { background: var(--surface-2); color: var(--muted); }
   .cal-day.sel .c { background: var(--accent-ink); color: var(--accent); }
+  .live .memo a { color: var(--accent); word-break: break-all; }
 </style>
 </head>
 <body class="signed-out">
@@ -350,13 +357,13 @@ body.scope-all .top { box-shadow: inset 0 -3px 0 var(--warn-soft); }
         </div>
         <div id="tweetLoaded" class="chips" style="margin-top:6px"></div>
         <div class="xtag-box">
-          <span class="lbl" style="margin:0">ハッシュタグでXを検索</span>
+          <span class="lbl" style="margin:0">Xで探す（ハッシュタグ・グループのアカウント）</span>
           <div id="xTagChips" class="chips"></div>
           <div class="row" style="flex-wrap:wrap">
             <div class="grow"><input id="xTagIn" class="field" placeholder="#ハッシュタグ（例：#手羽セトリ）"></div>
             <button type="button" id="xTagGo" class="btn">検索</button>
           </div>
-          <label class="hint"><input type="checkbox" id="xTagDate" checked> フォームの日付（その日と翌日）で絞る</label>
+          <label class="hint"><input type="checkbox" id="xTagDate" checked> フォームの日付（その日と翌日）で絞る（アカウントはその期間の投稿を検索。外すとプロフィールを開きます）</label>
         </div>
       </div>
       <details id="tweetTextBox">
@@ -373,10 +380,17 @@ body.scope-all .top { box-shadow: inset 0 -3px 0 var(--warn-soft); }
     <details class="panel inset" id="ttPanel">
       <summary><h2 style="display:inline">TimeTreeのスケジュールから取り込む</h2></summary>
       <p class="hint">グループ公式のTimeTreeカレンダーからライブの予定を読み込み、選んだものを「グループ全体」のライブ（行っていない扱い）として保存します。行ったライブは、保存後に一覧の「行った」で切り替えられます。期間は自由に選べます（1回に最大3年分）。</p>
+      <div><label class="lbl" for="ttGroup">グループ</label><select id="ttGroup" class="field"></select></div>
+      <div class="kindbar" role="radiogroup" aria-label="読み込む日付" style="margin-top:8px">
+        <label><input type="radio" name="ttMode" value="day" checked> 1日だけ</label>
+        <label><input type="radio" name="ttMode" value="range"> 期間を指定</label>
+      </div>
       <div class="row" style="flex-wrap:wrap">
-        <div class="grow"><label class="lbl" for="ttGroup">グループ</label><select id="ttGroup" class="field"></select></div>
-        <div><label class="lbl" for="ttFrom">いつから</label><input type="date" id="ttFrom" class="field"></div>
-        <div><label class="lbl" for="ttTo">いつまで</label><input type="date" id="ttTo" class="field"></div>
+        <div id="ttDayBox"><label class="lbl" for="ttDay">日付</label><input type="date" id="ttDay" class="field"></div>
+        <div id="ttRangeBox" class="row" style="flex-wrap:wrap" hidden>
+          <div><label class="lbl" for="ttFrom">いつから</label><input type="date" id="ttFrom" class="field"></div>
+          <div><label class="lbl" for="ttTo">いつまで</label><input type="date" id="ttTo" class="field"></div>
+        </div>
         <button type="button" id="ttLoad" class="btn primary" style="align-self:flex-end">予定を読み込む</button>
       </div>
       <p id="ttMsg" class="hint"></p>
@@ -1709,14 +1723,16 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     if (!m) return null;
     return { block: m[0].trim(), info: m[1].trim(), url: m[2], rest: memo.slice(m[0].length).trim() };
   }
+  // メモの中のURLを押せるリンクにする
+  const linkify = t => esc(t).replace(/https?:\/\/[^\s<>"']+/g, u => `<a href="${u}" target="_blank" rel="noopener">${u.length > 60 ? u.slice(0, 60) + '…' : u}</a>`);
   function memoHTML(d) {
     const memo = String(d.memo || '');
     if (!memo) return '';
     const m = splitTTMemo(memo);
-    if (!m) return `<div class="memo">${esc(memo)}</div>`;
+    if (!m) return `<div class="memo">${linkify(memo)}</div>`;
     const info = m.info, rest = m.rest;
-    return `<details class="ttinfo"><summary>TimeTreeの情報</summary>${info ? `<div class="memo">${esc(info)}</div>` : ''}<a href="${esc(m.url)}" target="_blank" rel="noopener">TimeTreeで開く</a></details>`
-      + (rest ? `<div class="memo">${esc(rest)}</div>` : '');
+    return `<details class="ttinfo"><summary>TimeTreeの情報</summary>${info ? `<div class="memo">${linkify(info)}</div>` : ''}<a href="${esc(m.url)}" target="_blank" rel="noopener">TimeTreeで開く</a></details>`
+      + (rest ? `<div class="memo">${linkify(rest)}</div>` : '');
   }
   // X でセトリのハッシュタグを探すURL（日付があればその日と翌日の投稿に絞る）
   function xSearchURL(group, date, only) {
@@ -1730,13 +1746,31 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   }
   function updateXSearchBtn() { $('xSearchBtn').href = xSearchURL(curGroup(), F.date.value); renderXTags(); }
   const xTagDate = () => $('xTagDate').checked ? F.date.value : '';
-  function renderXTags() {
-    const g = curGroup(), tags = cand.setoriTags[g] || [];
-    $('xTagChips').innerHTML = tags.length
-      ? tags.map(t => `<a class="chip" data-xtag="${esc(t)}" href="${esc(xSearchURL(g, xTagDate(), t))}" target="_blank" rel="noopener">#${esc(t)}</a>`).join('')
-      : `<span class="hint">${g ? `「${esc(g)}」のセトリ用ハッシュタグはまだありません。下に入れて検索するか、候補の管理で登録してください。` : 'グループを入れると、登録したハッシュタグがここに出ます。'}</span>`;
+  // アカウントのリンク：日付で絞るときはその日〜翌日の投稿を検索、そうでなければプロフィール
+  function xAccountURL(acc, date) {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(date || '')) {
+      const next2 = new Date(Date.parse(date + 'T00:00:00Z') + 2 * 86400000).toISOString().slice(0, 10);
+      return 'https://x.com/search?f=live&q=' + encodeURIComponent(`from:${acc} since:${date} until:${next2}`);
+    }
+    return 'https://x.com/' + encodeURIComponent(acc);
   }
-  $('xTagChips').addEventListener('click', e => { const a = e.target.closest('a[data-xtag]'); if (a) a.href = xSearchURL(curGroup(), xTagDate(), a.dataset.xtag); });
+  function renderXTags() {
+    const cur = curGroup(), date = xTagDate();
+    const groups = [...new Set([...Object.keys(cand.setoriTags || {}), ...Object.values(cand.accounts || {})])].filter(Boolean)
+      .sort((a, b) => (b === cur) - (a === cur) || a.localeCompare(b, 'ja'));
+    $('xTagChips').innerHTML = groups.length ? groups.map(g => {
+      const tags = cand.setoriTags[g] || [], accs = accountsOf(g);
+      return `<div class="xtag-row${g === cur ? ' cur' : ''}"><span class="xtag-g">${esc(g)}</span>`
+        + tags.map(t => `<a class="chip" data-xtag="${esc(t)}" data-g="${esc(g)}" href="${esc(xSearchURL(g, date, t))}" target="_blank" rel="noopener">#${esc(t)}</a>`).join('')
+        + accs.map(a => `<a class="chip acc" data-xacc="${esc(a)}" href="${esc(xAccountURL(a, date))}" target="_blank" rel="noopener">@${esc(a)}</a>`).join('')
+        + '</div>';
+    }).join('') : '<span class="hint">セトリ用ハッシュタグやグループのXアカウントを登録すると、ここに一覧で出ます（候補の管理 → グループ・体制・メンバー）。</span>';
+  }
+  $('xTagChips').addEventListener('click', e => {
+    const a = e.target.closest('a[data-xtag], a[data-xacc]');
+    if (!a) return;
+    a.href = a.dataset.xacc ? xAccountURL(a.dataset.xacc, xTagDate()) : xSearchURL(a.dataset.g, xTagDate(), a.dataset.xtag);
+  });
   $('xTagDate').addEventListener('change', renderXTags);
   F.group.addEventListener('input', renderXTags); F.group.addEventListener('change', renderXTags); F.date.addEventListener('change', renderXTags);
   function xTagSearch() {
@@ -3140,8 +3174,12 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   }
   (() => {
     const day = n => new Date(Date.now() + 9 * 3600 * 1000 + n * 86400000).toISOString().slice(0, 10);
-    $('ttFrom').value = day(-90); $('ttTo').value = day(60);
+    $('ttFrom').value = day(-90); $('ttTo').value = day(60); $('ttDay').value = day(0);
   })();
+  const ttMode = () => (document.querySelector('input[name=ttMode]:checked') || {}).value || 'day';
+  document.querySelectorAll('input[name=ttMode]').forEach(r => r.addEventListener('change', () => {
+    $('ttDayBox').hidden = ttMode() !== 'day'; $('ttRangeBox').hidden = ttMode() === 'day';
+  }));
   const ttMs = v => { const n = Number(v); return n && n < 1e12 ? n * 1000 : n; };
   function ttDate(e) {
     const ms = ttMs(e.start_at);
@@ -3220,8 +3258,11 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   async function ttFetchCal(alias) {
     const base = (cand.timetree.worker || '').replace(/\/+$/, '');
     const q = new URLSearchParams();
-    if ($('ttFrom').value) q.set('from', $('ttFrom').value);
-    if ($('ttTo').value) q.set('to', $('ttTo').value);
+    if (ttMode() === 'day') { q.set('from', $('ttDay').value); q.set('to', $('ttDay').value); }
+    else {
+      if ($('ttFrom').value) q.set('from', $('ttFrom').value);
+      if ($('ttTo').value) q.set('to', $('ttTo').value);
+    }
     const r = await fetch(`${base}/events/${encodeURIComponent(alias)}?${q}`);
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const j = await r.json();
@@ -3233,7 +3274,9 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       $('ttPanel').querySelector('details').open = true;
       return toast('先に「中継サーバーの設定」でURLを保存してください', 'error');
     }
-    if ($('ttFrom').value && $('ttTo').value && $('ttFrom').value > $('ttTo').value) return toast('「いつから」は「いつまで」より前の日付にしてください', 'error');
+    const oneDay = ttMode() === 'day' ? $('ttDay').value : '';
+    if (ttMode() === 'day' && !oneDay) return toast('日付を選んでください', 'error');
+    if (!oneDay && $('ttFrom').value && $('ttTo').value && $('ttFrom').value > $('ttTo').value) return toast('「いつから」は「いつまで」より前の日付にしてください', 'error');
     const sel = $('ttGroup').value;
     const targets = Object.entries(cand.timetree.cals || {}).filter(([, g]) => sel === '*' || g === sel);
     if (!targets.length) return toast('TimeTreeカレンダーが登録されていません', 'error');
@@ -3247,7 +3290,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
         if (j.from) range = { from: Math.min(range ? range.from : Infinity, j.from), to: Math.max(range ? range.to : 0, j.to) };
         j.public_events.forEach(ev => {
           const date = ttDate(ev);
-          if (!date) return;
+          if (!date || (oneDay && date !== oneDay)) return;
           const title = ttTitle(ev.title);
           ttEvents.push({ ev, alias, group, date, title, venue: canonical(ttVenue(ev), [...view.venues]) || ttVenue(ev), time: ttStartTime(ev), liveType: ttGuessType(title), notLive: TT_NOT_LIVE.test(ev.title || '') });
         });
@@ -3267,7 +3310,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     });
     ttEvents.sort((a, b) => a.date.localeCompare(b.date) || (a.time || '').localeCompare(b.time || '') || a.group.localeCompare(b.group, 'ja'));
     btn.disabled = false;
-    const span = range ? `（${fmtDate(new Date(range.from + 9 * 3600 * 1000).toISOString().slice(0, 10))}〜${fmtDate(new Date(range.to - 1 + 9 * 3600 * 1000).toISOString().slice(0, 10))}）` : '';
+    const span = oneDay ? `（${fmtDate(oneDay)}）` : range ? `（${fmtDate(new Date(range.from + 9 * 3600 * 1000).toISOString().slice(0, 10))}〜${fmtDate(new Date(range.to - 1 + 9 * 3600 * 1000).toISOString().slice(0, 10))}）` : '';
     $('ttMsg').textContent = (ttEvents.length ? `${ttEvents.length}件の予定が見つかりました${span}。取り込むものにチェックを入れてください。` : `予定が見つかりませんでした${span}。`)
       + (errs.length ? ` ※読み込めなかったカレンダー：${errs.join('、')}（中継サーバーのURLやカレンダー名を確認してください）` : '');
     renderTTList();
