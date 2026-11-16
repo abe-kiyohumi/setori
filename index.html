@@ -320,7 +320,10 @@ body.scope-all .top { box-shadow: inset 0 -3px 0 var(--warn-soft); }
   .pend .tw a { color: var(--accent); font-size: .85rem; word-break: break-all; }
   .pend .why { font-size: .8rem; color: var(--muted); }
   .pend.rejected { border-left-color: var(--line); background: var(--surface-2); }
-  .edit-float { position: fixed; right: 0; top: 40%; z-index: 41; padding: 10px 8px 12px; border: 0; border-radius: 12px 0 0 12px; background: var(--accent); color: var(--accent-ink); box-shadow: var(--shadow); cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 6px; font-family: var(--f-body); }
+  .edit-floats { position: fixed; right: 0; top: 30%; z-index: 41; display: flex; flex-direction: column; gap: 8px; }
+  .edit-floats[hidden] { display: none; }
+  .edit-float.save { background: var(--ok); color: #fff; }
+  .edit-float { padding: 10px 8px 12px; border: 0; border-radius: 12px 0 0 12px; background: var(--accent); color: var(--accent-ink); box-shadow: var(--shadow); cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 6px; font-family: var(--f-body); }
   .edit-float[hidden] { display: none; }
   .edit-float .ef-x { font-size: 1.2rem; line-height: 1; font-weight: 700; }
   .edit-float .ef-t { writing-mode: vertical-rl; text-orientation: upright; font-size: .9rem; font-weight: 700; letter-spacing: .12em; line-height: 1; }
@@ -792,7 +795,10 @@ body.scope-all .top { box-shadow: inset 0 -3px 0 var(--warn-soft); }
 </main>
 
 <div id="toast" class="toast" hidden></div>
-<button type="button" id="editFloat" class="edit-float" hidden aria-label="ライブの編集をやめる"><span class="ef-x" aria-hidden="true">×</span><span class="ef-t">編集をやめる</span></button>
+<div id="editFloats" class="edit-floats" hidden>
+  <button type="button" id="editSaveFloat" class="edit-float save" aria-label="編集した内容で更新する"><span class="ef-x" aria-hidden="true">✓</span><span class="ef-t">更新する</span></button>
+  <button type="button" id="editFloat" class="edit-float" aria-label="ライブの編集をやめる"><span class="ef-x" aria-hidden="true">×</span><span class="ef-t">編集をやめる</span></button>
+</div>
 <button type="button" id="toTop" class="to-top" aria-label="いちばん上に戻る" hidden>
   <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M12 5l-7 7m7-7l7 7M12 5v14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
 </button>
@@ -1679,7 +1685,8 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     }, parts.length ? parts : [emptyPartSafe()]);
     if (formTT && formTT.id) { entry.timetreeId = formTT.id; if (formTT.cal) entry.timetreeCal = formTT.cal; }
     if (!live) { entry.setlist = ''; delete entry.parts; }
-    const missing = [['日付', entry.date], ['グループ', entry.group], live ? ['セットリスト', entry.setlist] : ['チェキ（相手と枚数）', entry.chekiDetails.length]]
+    // 新しく記録するときはセットリスト（チェキのみの記録はチェキ）も必須。編集のときは日付とグループだけ
+    const missing = [['日付', entry.date], ['グループ', entry.group], ...(editingId ? [] : [live ? ['セットリスト', entry.setlist] : ['チェキ（相手と枚数）', entry.chekiDetails.length]])]
       .filter(([, v]) => !v).map(([k]) => k);
     if (missing.length) { toast(`${missing.join('・')}を入力してください`, 'error'); return; }
     const wasEdit = !!editingId;
@@ -1701,6 +1708,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   });
   $('cancelEditButton').addEventListener('click', () => { resetForm(); toast('編集をやめました'); });
   $('editFloat').addEventListener('click', () => { resetForm(); toast('編集をやめました'); });
+  $('editSaveFloat').addEventListener('click', () => $('liveEntryForm').requestSubmit());
 
   function showFormTT() {
     const box = $('ttFormInfo');
@@ -1721,7 +1729,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     editingId = null;
     $('submitButton').textContent = '保存する';
     $('formTitle').textContent = 'ライブを記録';
-    $('cancelEditButton').hidden = true; $('editFloat').hidden = true;
+    $('cancelEditButton').hidden = true; $('editFloats').hidden = true;
     $('chekiCountInput').value = '1';
     costumeAuto = ''; typeAuto = ''; $('costumeHint').textContent = '';
   }
@@ -1743,7 +1751,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     editingId = id;
     $('submitButton').textContent = '更新する';
     $('formTitle').textContent = `編集中: ${d.date} ${d.liveName || d.liveType || KIND_LABEL[kindOf(d)]}`;
-    $('cancelEditButton').hidden = false; $('editFloat').hidden = false;
+    $('cancelEditButton').hidden = false; $('editFloats').hidden = false;
     $('editFloat').title = `編集中: ${d.date} ${d.liveName || ''}`;
     showTab('entry');
     $('liveEntryForm').scrollIntoView({ behavior: 'smooth' });
@@ -3060,11 +3068,62 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   }
   const looksLikeHandle = s => /^[A-Za-z0-9_]{1,15}$/.test(s) && /[_0-9]/.test(s);
 
+  // 1つのツイートに複数のセトリ（フェス・別ステージ・昼夜など）が書かれているときに分ける
+  //  ・曲に番号があるとき：番号が1に戻ったところで区切る（その前のライブ名・ステージ名の行を名前にする）
+  //  ・番号がないとき：曲と曲の間にライブ名などの行があるか、空行があるところで区切る（アンコールは区切らない）
+  const CIRCLED = '①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳', CIRCLED2 = '❶❷❸❹❺❻❼❽❾❿';
+  function songNumber(l) {
+    const m = l.match(/^(?:M|Ｍ|m|ｍ)?\s*[.．]?\s*([0-9０-９]{1,2})(?![0-9０-９])/);
+    if (m) return parseInt(m[1].normalize('NFKC'), 10);
+    const a = CIRCLED.indexOf(l[0]); if (a >= 0) return a + 1;
+    const b = CIRCLED2.indexOf(l[0]); if (b >= 0) return b + 1;
+    return null;
+  }
+  const isEncoreLine = l => /^(?:EN|ＥＮ|En|en|アンコール|encore|Encore|ENCORE)/.test(l);
+  function splitSections(lines, gapBefore, songLines, used, knownSongs) {
+    if (songLines.length < 2) return [];
+    const songIdx = new Set(songLines.map(o => o.i));
+    const cleanLabel = l => stripBrackets(l.replace(/[#＃]\S+/g, ' ').replace(HEADER_RE, ' ').replace(WEEKDAY_RE, ' ').replace(/[【】\[\]『』「」〈〉《》＜＞<>]/g, ' ').replace(/^(本日の|今日の)/, '').replace(/\s+/g, ' ').trim());
+    const isLabel = l => { const t = cleanLabel(l); return !!t && !NOT_SONG.test(t) && !isEncoreLine(t) && !/^([#＃]\S+\s*)+$/.test(l) && !/^(MC|ＭＣ|SE|ＳＥ)\b/i.test(t); };
+    const numbered = songLines.filter(o => !isEncoreLine(lines[o.i]) && songNumber(lines[o.i]) != null).length >= 2;
+    const blocks = [];
+    let cur = null, prevNum = null;
+    songLines.forEach((o, k) => {
+      const n = isEncoreLine(lines[o.i]) ? null : songNumber(lines[o.i]);
+      let split = false, labelIdx = [];
+      if (k > 0) {
+        for (let j = songLines[k - 1].i + 1; j < o.i; j++) if (!songIdx.has(j) && isLabel(lines[j])) labelIdx.push(j);
+        if (numbered) split = n === 1 && prevNum != null && prevNum >= 1;
+        else split = !isEncoreLine(lines[o.i]) && (labelIdx.length > 0 || gapBefore[o.i]);
+      } else {
+        // 最初のセトリの名前：すぐ前の行（衣装の行は飛ばす。日付・会場・見出しで使った行は除く）
+        for (let j = o.i - 1; j >= 0 && j >= o.i - 3; j--) {
+          if (LABELS.costume.test(lines[j])) { labelIdx.unshift(j); continue; }
+          if (!used.has(j) && isLabel(lines[j])) labelIdx.unshift(j);
+          break;
+        }
+      }
+      if (k === 0 || split) { cur = { labelIdx, songs: [] }; blocks.push(cur); }
+      cur.songs.push(normSong(canonical(o.s, knownSongs) || o.s));
+      if (n != null) prevNum = n;
+    });
+    if (blocks.length < 2) return [];
+    return blocks.map(b => {
+      let costume = '';
+      const label = b.labelIdx.map(j => {
+        const m = lines[j].match(LABELS.costume);
+        if (m) { costume = m[1].replace(/[#＃]\S+/g, '').trim(); return ''; }
+        return cleanLabel(lines[j]);
+      }).filter(Boolean).join(' ');
+      return { label, costume, songs: b.songs };
+    });
+  }
   function parseSetlistText(text) {
     const r = { date: '', dateSource: '', venue: '', group: '', groupSource: '', liveName: '', liveType: '', costume: '', members: [], songs: [], newSongs: [], hashtags: [], absent: '', hints: [] };
     const cleaned = String(text || '').replace(/https?:\/\/\S+/g, '').replace(/pic\.twitter\.com\/\S+/g, '').replace(/\r/g, '');
     r.hashtags = [...cleaned.matchAll(/[#＃]([^\s#＃]+)/g)].map(m => m[1]);
-    const lines = cleaned.split('\n').map(l => l.replace(/[​﻿]/g, '').trim()).filter(Boolean);
+    const lines = [], gapBefore = []; // gapBefore[i]: その行の前に空行があったか
+    { let blank = false; cleaned.split('\n').map(l => l.replace(/[​﻿]/g, '').trim()).forEach(l => { if (!l) { blank = true; return; } gapBefore.push(blank && lines.length > 0); lines.push(l); blank = false; }); }
     const used = new Set();
     let dateRest = '', nameFromVenueLine = '';
 
@@ -3168,6 +3227,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     }
     r.songs = r.songs.filter(s => !NOT_SONG.test(s)).map(normSong);
     r.newSongs = r.songs.filter(s => !knownSongs.some(k => norm(k) === norm(s)));
+    r.sections = splitSections(lines, gapBefore, songLines, used, knownSongs);
 
     // 7) ライブ名・種類
     const firstSong = songLines.length ? songLines[0].i : lines.length;
@@ -3267,6 +3327,12 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       if (!currentLineup) { currentMembers = [...new Set(r.members)]; renderMembers(); }
     } else refreshLineupSelect(true);
     if (r.songs.length) F.setlist.value = r.songs.join('\n');
+    r.splitDone = false;
+    if (r.sections && r.sections.length > 1 && getKind() === 'live' && formParts.length === 1 && !currentCheki.length && !currentChekiTweets.length) {
+      formParts = r.sections.map((sec, i) => ({ label: sec.label || `ステージ${i + 1}`, costume: sec.costume || (i === 0 ? r.costume || '' : ''), setlist: sec.songs.join('\n'), chekiDetails: [], chekiTweets: [] }));
+      loadPartToForm(0);
+      r.splitDone = true;
+    }
     renderHints(currentHints); renderPartTabs(); renderCostumePreview();
     if (r.liveType) typeAuto = ''; autoFill();
     (loadedTweets.length ? loadedTweets.filter(t => t.ok).map(t => t.url) : tweetUrlsIn()).forEach(url => { if (!F.memo.value.includes(url)) F.memo.value = (F.memo.value ? F.memo.value + '\n' : '') + '元ツイート: ' + url; });
@@ -3291,7 +3357,8 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       ${!r.group && r.hashtags.length ? `<p class="hint">ハッシュタグ: ${r.hashtags.map(h => '#' + esc(h)).join(' ')}。グループを「候補の管理」に登録しておくと次から自動で判別します。</p>` : ''}
       ${!r.songs.length ? '<p class="hint">曲が見つかりませんでした。セトリが画像のツイートは読み取れないので、フォームに入力してください。</p>' : ''}
       ${r.sources > 1 ? `<p class="hint">${r.sources}件のツイートから読み取りました。セトリは曲がいちばん多いツイート、ほかの項目は読み取れたツイートの内容を使い、ライブ名・会場は全部のツイートから候補を出しています。</p>` : ''}
-      ${r.songTweets && r.songTweets.length > 1 && getKind() === 'live' ? `<div class="row" style="align-items:center"><span class="hint">セトリの入ったツイートが${r.songTweets.length}件あります。</span><button type="button" class="btn sm" id="splitTweetsBtn">ツイートごとにステージに分けて入れる</button></div>` : ''}`;
+      ${r.splitDone ? `<p class="hint">1つのツイートにセトリが${r.sections.length}つありました（${r.sections.map((x, i) => esc(x.label || `ステージ${i + 1}`) + `：${x.songs.length}曲`).join('／')}）。ステージ・部に分けて入れたので、ステージ名を確認してください。別々のライブにしたいときは、保存後に一覧の「ステージごとに分ける」を押してください。</p>` : ''}
+      ${r.songTweets && r.songTweets.length > 1 && r.sources > 1 && getKind() === 'live' ? `<div class="row" style="align-items:center"><span class="hint">${r.sources}件のツイートにセトリが合わせて${r.songTweets.length}つあります。</span><button type="button" class="btn sm" id="splitTweetsBtn">ツイートごとにステージに分けて入れる</button></div>` : ''}`;
     box.hidden = false;
     lastParsed = r;
   }
@@ -3338,8 +3405,9 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     r.songTweets = songRs.map(x => {
       const uniq = x.hints.filter(h => !songRs.some(o => o !== x && o.hints.some(oh => loose(oh) === loose(h))));
       const label = uniq.find(h => /ステージ|STAGE|部|公演|回|:\d{2}|時/i.test(h)) || uniq[0] || (x.liveName && x.liveName !== r.liveName ? x.liveName : '') || (x.venue && x.venue !== r.venue ? x.venue : '');
-      return { songs: x.songs, costume: x.costume, label };
-    });
+      if (x.sections && x.sections.length > 1) return x.sections.map((sec, i) => ({ songs: sec.songs, costume: sec.costume || (i === 0 ? x.costume : ''), label: [label, sec.label].filter(Boolean).join(' ') || `ステージ${i + 1}` }));
+      return [{ songs: x.songs, costume: x.costume, label }];
+    }).flat();
     tweetAccount = (okTweets[mi] || okTweets[0] || {}).account || '';
     tweetPostDate = (okTweets[mi] || okTweets[0] || {}).date || '';
     applyParsed(r); renderParseResult(r);
@@ -3711,6 +3779,11 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   // ================= バージョン・更新履歴 =================
   // 新しい機能を追加したら、いちばん上に1件足して番号を上げる
   const VERSIONS = [
+    { v: '3.0', date: '2026/11/16', items: [
+      '編集中は、セットリストが空でも「更新する」で保存できるように（日付とグループだけ必須）',
+      '画面の右端の「編集をやめる」の上に「更新する」ボタン',
+      '1つのツイートに複数のセトリ（フェス・別ステージ・昼夜など）があるとき、自動で見分けてステージ・部に分けて入れる（曲の番号が1に戻ったところ／曲の間のライブ名・ステージ名の行や空行で区切る）',
+    ] },
     { v: '2.9', date: '2026/11/16', items: [
       '表記ゆれ・似ている候補は、まとめるものをチェックで選び、どれに合わせるかを選んで統一する方式に（チェックしていないものは残る）',
     ] },
@@ -3979,7 +4052,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     if (urls.length) F.memo.value = [F.memo.value, ...urls].filter(Boolean).join('\n');
     pendingEditId = p.id;
     $('formTitle').textContent = `確認待ちを修正中: ${p.date} ${p.group}`;
-    $('cancelEditButton').hidden = false; $('editFloat').hidden = false;
+    $('cancelEditButton').hidden = false; $('editFloats').hidden = false;
     renderPartTabs(); renderCostumePreview();
     showTab('entry');
     $('liveEntryForm').scrollIntoView({ behavior: 'smooth' });
