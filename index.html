@@ -3760,6 +3760,9 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
         x.status = 'done'; x.check = false; n++;
       }
       toast(`${n}件のライブを取り込みました`);
+      // 取り込みが終わったら、読み込んだ予定の一覧を消して最初の状態に戻す
+      ttEvents = []; $('ttAttended').checked = false;
+      $('ttMsg').textContent = `${n}件のライブを取り込みました。ライブ一覧の「グループ全体」で確認できます。`;
     } catch (err) { writeError(err); }
     finally { renderTTList(); }
   });
@@ -3809,6 +3812,9 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   // ================= バージョン・更新履歴 =================
   // 新しい機能を追加したら、いちばん上に1件足して番号を上げる
   const VERSIONS = [
+    { v: '3.3', date: '2026/11/16', items: [
+      'TimeTreeの取り込みが終わったら、読み込んだ予定の一覧を消して最初の状態に戻す',
+    ] },
     { v: '3.2', date: '2026/11/16', items: [
       '候補の管理で、長い名前（会場など）が枠からはみ出さず全部見えるように折り返して表示',
     ] },
