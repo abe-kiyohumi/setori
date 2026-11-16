@@ -1119,17 +1119,18 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   // ================= 保存先（Firebase / Firestore） =================
   // データの場所: users/{ログインしたユーザーのID}/lives/{ライブID} と users/{ID}/meta/candidates
   const Store = {
-    mode: 'connecting', uid: null, unsubs: [], candChain: Promise.resolve(),
+    mode: 'connecting', uid: null, unsubs: [], candChain: Promise.resolve(), loaded: { lives: false, cand: false },
     init() {
       onAuthStateChanged(auth, user => {
         this.unsubs.forEach(u => u()); this.unsubs = [];
         liveData = []; deletedLiveData = []; cand = emptyCandidates(); costumeImgs = []; pendingData = [];
         showAuth(user);
         if (!user) { this.uid = null; this.mode = 'signedout'; setSync(); renderAll(); return; }
-        this.uid = user.uid; this.mode = 'cloud'; setSync();
+        this.uid = user.uid; this.mode = 'cloud'; this.loaded = { lives: false, cand: false }; setSync();
         this.unsubs.push(onSnapshot(collection(fs, 'users', user.uid, 'lives'), { includeMetadataChanges: true }, snap => {
           const all = snap.docs.map(d => ({ ...d.data(), id: d.id }));
           liveData = all.filter(x => !x.deleted);
+          if (!snap.metadata.fromCache) this.loaded.lives = true;
           deletedLiveData = all.filter(x => x.deleted).sort((a, b) => (b.deletedAt || 0) - (a.deletedAt || 0));
           setSync(snap.metadata.fromCache ? 'offline' : 'cloud');
           renderAll();
@@ -1146,6 +1147,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
         }, writeError));
         this.unsubs.push(onSnapshot(doc(fs, 'users', user.uid, 'meta', 'candidates'), s => {
           cand = candFromJSON(s.exists() ? s.data() : null);
+          if (!s.metadata || !s.metadata.fromCache) this.loaded.cand = true;
           renderAll();
         }, writeError));
       });
@@ -3841,6 +3843,9 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   // ================= バージョン・更新履歴 =================
   // 新しい機能を追加したら、いちばん上に1件足して番号を上げる
   const VERSIONS = [
+    { v: '3.6', date: '2026/11/16', items: [
+      '自動チェックは、サーバーからデータを読み込み終わってから始めるように',
+    ] },
     { v: '3.5', date: '2026/11/16', items: [
       'セトリの後ろにある「次のライブは〜」などの告知は、日付・会場・曲として読まないように',
       '自動チェックの照らし合わせ（ツイートとTimeTreeの予定・記録済みのライブ）をサイトに組み込み',
@@ -4166,8 +4171,8 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   const plus1 = d => new Date(Date.parse(d + 'T00:00:00Z') + 86400000).toISOString().slice(0, 10);
   window.__setoriAuto = {
     version: 1,
-    // ログインしてデータを読み込み終わったか
-    ready: () => !!Store.uid && Store.mode === 'cloud',
+    // ログインして、サーバーからライブと候補を読み込み終わったか
+    ready: () => !!Store.uid && Store.mode === 'cloud' && Store.loaded.lives && Store.loaded.cand,
     // 登録内容（グループ・TimeTreeカレンダー・セトリ用ハッシュタグ・Xアカウント）
     config() {
       const groups = [...new Set([...Object.values(cand.timetree.cals || {}), ...Object.keys(cand.setoriTags || {}), ...Object.values(cand.accounts || {})])].filter(Boolean).sort((a, b) => a.localeCompare(b, 'ja'));
