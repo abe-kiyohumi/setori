@@ -2676,7 +2676,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     toast(`カバー曲の書き方をそろえました（ライブ${lives.length}件）`);
   });
 
-  // ----- 似ている候補：大文字小文字・記号・スペースをそろえたうえで、8割以上同じ文字のもの -----
+  // ----- 似ている候補：大文字小文字・記号・スペースをそろえたうえで、8割以上同じ文字のもの／短い名前がまるごと入っているもの -----
   function levenshtein(a, b) {
     let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
     for (let i = 1; i <= a.length; i++) {
@@ -2687,9 +2687,15 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     return prev[b.length];
   }
   const SIM_RATE = 0.8;
+  const STAGE_RE = /ステージ|すてーじ|stage/i;
   function similarCand(k, a, b) {
     const la = loose(a), lb = loose(b);
     if (!la || !lb || la === lb) return false; // 完全に同じになるものは「表記ゆれ」の方で出す
+    // フェスのステージ名など「〇〇ステージ」は、完全に同じとき（表記ゆれ）だけ
+    if (k === 'venues' && (STAGE_RE.test(la) || STAGE_RE.test(lb))) return false;
+    // 短い方がまるごと長い方に入っている（「窓枠」と「Live House 浜松窓枠」）
+    const [sh, lo] = la.length <= lb.length ? [la, lb] : [lb, la];
+    if (k !== 'song' && sh.length >= 2 && lo.includes(sh)) return true;
     const long = Math.max(la.length, lb.length);
     if (Math.min(la.length, lb.length) / long < SIM_RATE) return false; // 長さが大きく違えば別物
     return 1 - levenshtein(la, lb) / long >= SIM_RATE;
@@ -3685,6 +3691,10 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   // ================= バージョン・更新履歴 =================
   // 新しい機能を追加したら、いちばん上に1件足して番号を上げる
   const VERSIONS = [
+    { v: '2.8', date: '2026/11/16', items: [
+      '「似ている候補」に、短い名前がまるごと入っているもの（「窓枠」と「Live House 浜松窓枠」など）も出す',
+      'フェスのステージ名（〇〇ステージ）は、完全に同じとき以外は似ている候補に出さない',
+    ] },
     { v: '2.7', date: '2026/11/16', items: [
       '「似ている候補」の範囲をせまく：大文字小文字・記号・スペースをそろえて8割以上同じ文字のものだけ（「NAGOYA」が付くだけでは出ない）',
     ] },
