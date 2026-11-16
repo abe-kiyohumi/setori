@@ -307,6 +307,19 @@ body.scope-all .top { box-shadow: inset 0 -3px 0 var(--warn-soft); }
   .ver-item h3 .now { font-size: .7rem; margin-left: 6px; padding: 1px 6px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
   .ver-item ul { margin: 0; padding-left: 1.2em; }
   .ver-item li { margin: 2px 0; }
+  /* 確認待ち */
+  .tabs .badge { display: inline-block; min-width: 1.5em; margin-left: 4px; padding: 0 6px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-size: .72rem; font-weight: 700; line-height: 1.5; text-align: center; }
+  .pend { border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: var(--r); background: var(--surface); padding: 14px; display: flex; flex-direction: column; gap: 6px; }
+  .pend .head { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; align-items: baseline; }
+  .pend .name { font-weight: 700; font-size: 1.02rem; overflow-wrap: anywhere; }
+  .pend .sub { font-size: .88rem; color: var(--muted); overflow-wrap: anywhere; }
+  .pend .target { font-size: .82rem; padding: 2px 8px; border-radius: 999px; background: var(--ok-soft); color: var(--ok); }
+  .pend .target.new { background: var(--accent-soft); color: var(--accent); }
+  .pend .target.warn { background: var(--warn-soft); color: var(--warn); }
+  .pend ol { margin: 4px 0 0; padding-left: 1.8em; font-size: .9rem; }
+  .pend .tw a { color: var(--accent); font-size: .85rem; word-break: break-all; }
+  .pend .why { font-size: .8rem; color: var(--muted); }
+  .pend.rejected { border-left-color: var(--line); background: var(--surface-2); }
   .edit-float { position: fixed; right: 0; top: 40%; z-index: 41; padding: 10px 8px 12px; border: 0; border-radius: 12px 0 0 12px; background: var(--accent); color: var(--accent-ink); box-shadow: var(--shadow); cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 6px; font-family: var(--f-body); }
   .edit-float[hidden] { display: none; }
   .edit-float .ef-x { font-size: 1.2rem; line-height: 1; font-weight: 700; }
@@ -333,6 +346,7 @@ body.scope-all .top { box-shadow: inset 0 -3px 0 var(--warn-soft); }
     </div>
     <nav class="tabs" role="tablist">
       <button role="tab" data-tab="entry" aria-selected="true">記録する</button>
+      <button role="tab" data-tab="pending" aria-selected="false">確認待ち<span id="pendingBadge" class="badge" hidden></span></button>
       <button role="tab" data-tab="list" aria-selected="false">ライブ一覧</button>
       <button role="tab" data-tab="ranking" aria-selected="false">ランキング</button>
       <button role="tab" data-tab="cheki" aria-selected="false">チェキ一括</button>
@@ -515,6 +529,22 @@ body.scope-all .top { box-shadow: inset 0 -3px 0 var(--warn-soft); }
         <button type="button" id="cancelEditButton" class="btn" hidden>編集をやめる</button>
       </div>
     </form>
+  </section>
+
+  <!-- ========== 確認待ち（自動で見つけたセトリ） ========== -->
+  <section class="tab" id="tab-pending" hidden>
+    <div class="panel">
+      <h2>確認待ちのセトリ</h2>
+      <p class="hint">毎週の自動チェックで、TimeTreeの予定とXのツイート（セトリ用ハッシュタグ・登録したグループのアカウント）を照らし合わせて見つけたセトリです。まだライブ一覧には入っていません。内容を確認して「確定」すると記録されます。直したいときは「フォームで確認・修正」を押してください。</p>
+      <p id="pendingSummary" class="hint"></p>
+    </div>
+    <div id="pendingList" class="lives"></div>
+    <details id="rejectedBox" class="panel inset" hidden>
+      <summary style="cursor:pointer"><b id="rejectedTitle">却下したもの</b></summary>
+      <p class="hint">却下したものは、次の自動チェックで同じツイートをもう一度出さないために残しています。</p>
+      <div id="rejectedList" class="lives"></div>
+      <div class="actions"><button type="button" id="clearRejected" class="btn danger">却下したものをすべて消す</button></div>
+    </details>
   </section>
 
   <!-- ========== 絞り込み（一覧・ランキング共通） ========== -->
@@ -853,6 +883,8 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   let formParts = [emptyPartSafe()], activePart = 0;
   function emptyPartSafe() { return { label: '', costume: '', setlist: '', chekiDetails: [], chekiTweets: [] }; }
   let tweetPostDate = ''; // URLから読み込んだツイートの投稿日
+  let pendingData = [];   // 確認待ち（自動で見つけたセトリ）
+  let pendingEditId = ''; // フォームで確認中の確認待ちID
   let costumeAuto = '', typeAuto = ''; // 自動で入れた衣装・種類（手で変えたら上書きしない）
   let formTT = null;      // 編集中のライブの TimeTree 情報 { block, id, cal }
   let tweetAccount = '';  // URLから読み込んだツイートのアカウント（小文字・@なし）
@@ -1045,7 +1077,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     init() {
       onAuthStateChanged(auth, user => {
         this.unsubs.forEach(u => u()); this.unsubs = [];
-        liveData = []; deletedLiveData = []; cand = emptyCandidates(); costumeImgs = [];
+        liveData = []; deletedLiveData = []; cand = emptyCandidates(); costumeImgs = []; pendingData = [];
         showAuth(user);
         if (!user) { this.uid = null; this.mode = 'signedout'; setSync(); renderAll(); return; }
         this.uid = user.uid; this.mode = 'cloud'; setSync();
@@ -1059,6 +1091,11 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
         // 衣装の写真（小さいサムネイルだけ購読。大きい写真は開いたときに読む）
         this.unsubs.push(onSnapshot(collection(fs, 'users', user.uid, 'costumeThumbs'), snap => {
           costumeImgs = snap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+          renderAll();
+        }, writeError));
+        // 確認待ち（自動で見つけたセトリ）
+        this.unsubs.push(onSnapshot(collection(fs, 'users', user.uid, 'pending'), snap => {
+          pendingData = snap.docs.map(d => ({ ...d.data(), id: d.id }));
           renderAll();
         }, writeError));
         this.unsubs.push(onSnapshot(doc(fs, 'users', user.uid, 'meta', 'candidates'), s => {
@@ -1102,6 +1139,18 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     async getFullImage(id) {
       const s = await getDoc(doc(fs, 'users', this.uid, 'costumeFull', id));
       return s.exists() ? s.data().data : '';
+    },
+    putPending(p) {
+      const { id, ...body } = p;
+      const i = pendingData.findIndex(x => x.id === id);
+      if (i >= 0) pendingData[i] = p; else pendingData.push(p);
+      renderAll();
+      return setDoc(doc(fs, 'users', this.uid, 'pending', id), JSON.parse(JSON.stringify(body))).catch(writeError);
+    },
+    deletePending(id) {
+      pendingData = pendingData.filter(x => x.id !== id);
+      renderAll();
+      return deleteDoc(doc(fs, 'users', this.uid, 'pending', id)).catch(writeError);
     },
     saveCandidates() {
       renderAll();
@@ -1615,6 +1664,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       .filter(([, v]) => !v).map(([k]) => k);
     if (missing.length) { toast(`${missing.join('・')}を入力してください`, 'error'); return; }
     const wasEdit = !!editingId;
+    const donePending = pendingEditId;
     let learned = '';
     if (tweetAccount && entry.group && !groupOfAccount(tweetAccount)) {
       cand.accounts[tweetAccount] = entry.group; Store.saveCandidates();
@@ -1628,6 +1678,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     }
     resetForm();
     Store.putLive(entry); toast((wasEdit ? '更新しました' : '保存しました') + learned);
+    if (donePending) { Store.deletePending(donePending); showTab('pending'); }
   });
   $('cancelEditButton').addEventListener('click', () => { resetForm(); toast('編集をやめました'); });
   $('editFloat').addEventListener('click', () => { resetForm(); toast('編集をやめました'); });
@@ -1639,7 +1690,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   }
   const ttIdFromUrl = u => { const m = String(u || '').match(/timetr\.ee\/p\/[^/\s]+\/([^/?#\s]+)/); return m ? m[1] : ''; };
   function resetForm() {
-    formTT = null; showFormTT();
+    formTT = null; showFormTT(); pendingEditId = '';
     $('liveEntryForm').reset();
     currentCheki = []; currentMembers = []; currentLineup = ''; lineupManual = false; currentChekiTweets = []; renderChekiTweets();
     tweetAccount = ''; lastFetched = ''; currentHints = []; renderHints([]); $('parseResult').hidden = true; $('tweetUrl').value = ''; $('tweetText').value = '';
@@ -3579,6 +3630,10 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   // ================= バージョン・更新履歴 =================
   // 新しい機能を追加したら、いちばん上に1件足して番号を上げる
   const VERSIONS = [
+    { v: '2.5', date: '2026/11/16', items: [
+      '「確認待ち」タブ：毎週の自動チェックで見つけたセトリを確認して確定（フォームで修正も可）',
+      '自動チェック用に、セトリ用ハッシュタグと登録したグループのアカウントのツイートから探せるように',
+    ] },
     { v: '2.4', date: '2026/11/16', items: [
       '候補の管理で「似ている候補」も表示（会場の「Live House 浜松窓枠」と「窓枠」など）。違うものは「別のもの」で非表示',
       '候補の一覧でチェックを付けたものを1つに統一（英語とカタカナの違いなど）',
@@ -3705,6 +3760,257 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   F.date.addEventListener('change', autoFill);
   F.costume.addEventListener('input', () => { if (F.costume.value !== costumeAuto) $('costumeHint').textContent = ''; });
 
+  // ================= 確認待ち（自動で見つけたセトリ） =================
+  // データの場所: users/{ID}/pending/{ID}
+  // { status: 'pending' | 'rejected', date, group, liveId, timetree: { id, alias, title, venue, time, note, url },
+  //   liveName, liveType, venue, costume, setlist, parts: [{ label, costume, setlist }], members, tweets: [{ url, text, account, date }], reason, createdAt }
+  const pendParts = p => (Array.isArray(p.parts) && p.parts.length ? p.parts : [{ label: '', costume: p.costume || '', setlist: p.setlist || '' }])
+    .map(x => ({ label: String(x.label || '').trim(), costume: String(x.costume || '').trim(), setlist: splitSongs(x.setlist).join('\n'), chekiDetails: [], chekiTweets: [] }));
+  // 確認待ちを書き込む先のライブ（ライブID → TimeTreeのID → 同じ日・同じグループのライブが1件だけ、の順に探す）
+  function pendTarget(p) {
+    if (p.liveId) { const d = liveData.find(x => x.id === p.liveId); if (d) return { live: d }; }
+    const ttId = p.timetree && p.timetree.id ? String(p.timetree.id) : '';
+    if (ttId) {
+      const d = liveData.find(x => String(x.timetreeId || '') === ttId || ttIdFromUrl((splitTTMemo(x.memo) || {}).url) === ttId);
+      if (d) return { live: d };
+    }
+    const same = liveData.filter(x => isLive(x) && x.date === p.date && x.group === p.group);
+    if (same.length === 1 && !ttId) return { live: same[0] };
+    return { live: null, same: same.length };
+  }
+  const hasSetlist = d => partsOf(d).some(x => splitSongs(x.setlist).length);
+  const pendTTMemo = t => t ? [t.time ? `開演 ${t.time}` : '', String(t.note || '').trim(), `TimeTree: ${t.url || `https://timetr.ee/p/${t.alias}/${t.id}`}`].filter(Boolean).join('\n') : '';
+  const pendTweetMemo = (p, memo) => (p.tweets || []).map(t => t.url).filter(u => u && !String(memo || '').includes(u)).map(u => '元ツイート: ' + u);
+  // 既存のステージに、見つけたセトリ・衣装を重ねる（チェキなどは残す）
+  function mergeParts(oldParts, newParts) {
+    const out = newParts.map((np, i) => {
+      const op = oldParts[i] || emptyPart();
+      return { ...op, label: np.label || op.label || '', costume: np.costume || op.costume || '', setlist: np.setlist || op.setlist || '' };
+    });
+    return out.concat(oldParts.slice(newParts.length));
+  }
+
+  function renderPending() {
+    const open = pendingData.filter(p => p.status !== 'rejected').sort((a, b) => (b.date || '').localeCompare(a.date || '') || (a.group || '').localeCompare(b.group || '', 'ja'));
+    const rej = pendingData.filter(p => p.status === 'rejected').sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    const badge = $('pendingBadge');
+    badge.hidden = !open.length; badge.textContent = open.length;
+    $('pendingSummary').textContent = open.length ? `${open.length}件の確認待ちがあります。` : '確認待ちはありません。';
+    const card = (p, rejected) => {
+      const t = pendTarget(p), parts = pendParts(p), multi = parts.length > 1;
+      const tgt = t.live
+        ? (hasSetlist(t.live) ? '<span class="target warn">記録済みのライブ（セトリあり）に上書き</span>' : '<span class="target">記録済みのライブに追加</span>')
+        : t.same > 1 ? `<span class="target warn">新しいライブとして作成（同じ日の記録が${t.same}件あり）</span>` : '<span class="target new">新しいライブとして作成</span>';
+      const name = p.liveName || (t.live && t.live.liveName) || (p.timetree && p.timetree.title) || 'ライブ';
+      const venue = p.venue || (t.live && t.live.venue) || (p.timetree && p.timetree.venue) || '';
+      const songs = parts.map((x, i) => `${multi ? `<b>${esc(x.label || `ステージ${i + 1}`)}</b>${x.costume ? `<span class="sub"> ／ 衣装: ${esc(x.costume)}</span>` : ''}` : ''}<ol>${splitSongs(x.setlist).map(s => `<li>${esc(s)}</li>`).join('')}</ol>`).join('');
+      const n = parts.reduce((m, x) => m + splitSongs(x.setlist).length, 0);
+      const btns = rejected
+        ? `<button type="button" class="btn sm" data-pend="restore" data-id="${esc(p.id)}">確認待ちに戻す</button><button type="button" class="btn sm danger" data-pend="purge" data-id="${esc(p.id)}">消す</button>`
+        : `<button type="button" class="btn sm primary" data-pend="ok" data-id="${esc(p.id)}">確定</button><button type="button" class="btn sm" data-pend="form" data-id="${esc(p.id)}">フォームで確認・修正</button><button type="button" class="btn sm danger" data-pend="reject" data-id="${esc(p.id)}">却下</button>`;
+      return `<article class="pend${rejected ? ' rejected' : ''}">
+        <div class="head"><span><span class="sub">${esc(fmtDate(p.date))}</span>　<span class="name">${esc(name)}</span></span>${tgt}</div>
+        <span class="sub"><b>${esc(p.group || '—')}</b> ／ ${esc(venue || '会場未記録')}${p.liveType ? ` ／ ${esc(p.liveType)}` : ''}${!multi && p.costume ? ` ／ 衣装: ${esc(p.costume)}` : ''}${(p.members || []).length ? ` ／ メンバー: ${esc(p.members.join('、'))}` : ''}</span>
+        ${rejected ? '' : `<details${n <= 30 ? ' open' : ''}><summary class="sub" style="cursor:pointer">セットリスト（${n}曲）</summary>${songs}</details>`}
+        ${(p.tweets || []).length ? `<div class="tw">${p.tweets.map(x => `<div><a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.account ? '@' + x.account : 'ツイート')}${x.date ? ' ' + esc(fmtDate(x.date)) : ''}</a></div>`).join('')}</div>` : ''}
+        ${p.reason ? `<span class="why">見つけた理由: ${esc(p.reason)}</span>` : ''}
+        <div class="row">${btns}</div>
+      </article>`;
+    };
+    $('pendingList').innerHTML = open.length ? open.map(p => card(p, false)).join('') : '<div class="panel"><p class="empty">確認待ちのセトリはありません。毎週の自動チェックで見つかると、ここに出ます。</p></div>';
+    $('rejectedBox').hidden = !rej.length;
+    $('rejectedTitle').textContent = `却下したもの（${rej.length}件）`;
+    $('rejectedList').innerHTML = rej.map(p => card(p, true)).join('');
+  }
+
+  // 確定：ライブ一覧に書き込む
+  async function confirmPending(p) {
+    const t = pendTarget(p), parts = pendParts(p);
+    if (!parts.some(x => splitSongs(x.setlist).length)) return toast('セットリストが空です。「フォームで確認・修正」で入力してください', 'error');
+    if (t.live) {
+      const d = t.live;
+      if (hasSetlist(d) && !await confirmBox(`「${d.liveName || 'このライブ'}」にはもうセットリストがあります。見つけたセットリストで上書きしますか？`)) return;
+      const memo = [d.memo || '', ...pendTweetMemo(p, d.memo)].filter(Boolean).join('\n');
+      const next = { ...d, liveName: d.liveName || p.liveName || '', venue: d.venue || p.venue || '', liveType: d.liveType || p.liveType || '', memo, updatedAt: Date.now() };
+      if (!(d.members || []).length && (p.members || []).length) next.members = [...p.members];
+      Store.putLive(withParts(next, mergeParts(partsOf(d), parts)));
+      toast(`「${next.liveName || 'ライブ'}」にセットリストを記録しました`);
+    } else {
+      if (t.same > 1 && !await confirmBox(`${fmtDate(p.date)}の${p.group}には、記録済みのライブが${t.same}件あります。新しいライブとして作成しますか？\n（既存のライブに入れたいときは「フォームで確認・修正」ではなく、一覧からそのライブを編集してください）`)) return;
+      const list = lineupsOfGroup(p.group);
+      const l = pickLineupByDate(list, p.date) || (list.length ? list[list.length - 1] : null);
+      const tt = p.timetree || null;
+      const memo = [pendTTMemo(tt), ...pendTweetMemo(p, '')].filter(Boolean).join('\n');
+      const members = (p.members || []).length ? [...p.members] : l ? [...l.members] : [];
+      const entry = withParts({
+        id: genId(), kind: 'live', attended: false, date: p.date, group: p.group,
+        liveName: p.liveName || (tt && tt.title) || '', liveType: p.liveType || (tt ? ttGuessType(tt.title || '') : ''), venue: p.venue || (tt && tt.venue) || '',
+        members, lineup: l && (!(p.members || []).length || lineupKey(p.group, members) === l.key) ? l.key : '',
+        memo, createdAt: Date.now(), updatedAt: Date.now(),
+      }, parts);
+      if (tt && tt.id) { entry.timetreeId = String(tt.id); if (tt.alias) entry.timetreeCal = tt.alias; }
+      Store.putLive(entry);
+      toast(`「${entry.liveName || 'ライブ'}」を記録しました（グループ全体・行っていない扱い）`);
+    }
+    Store.deletePending(p.id);
+  }
+
+  // フォームで確認・修正：記録するタブのフォームに入れる。保存すると確認待ちから消える
+  function openPendingInForm(p) {
+    const t = pendTarget(p), parts = pendParts(p);
+    if (t.live) {
+      editLive(t.live.id);
+      formParts = mergeParts(partsOf(t.live), parts);
+      loadPartToForm(0);
+      if (!F.name.value && p.liveName) F.name.value = p.liveName;
+      if (!F.venue.value && p.venue) F.venue.value = p.venue;
+      if (!F.type.value && p.liveType) F.type.value = p.liveType;
+    } else {
+      resetForm();
+      setKind('live');
+      const tt = p.timetree || null;
+      F.date.value = p.date || ''; F.group.value = p.group || '';
+      F.name.value = p.liveName || (tt && tt.title) || ''; F.venue.value = p.venue || (tt && tt.venue) || '';
+      F.type.value = p.liveType || (tt ? ttGuessType(tt.title || '') : '');
+      $('liveAttended').checked = false; applyAttend();
+      lineupManual = false; refreshLineupSelect(true);
+      if ((p.members || []).length) { currentMembers = [...p.members]; renderMembers(); }
+      formTT = tt ? { block: pendTTMemo(tt), id: String(tt.id || ''), cal: tt.alias || '' } : null;
+      showFormTT();
+      formParts = parts; loadPartToForm(0);
+    }
+    const urls = pendTweetMemo(p, F.memo.value);
+    if (urls.length) F.memo.value = [F.memo.value, ...urls].filter(Boolean).join('\n');
+    pendingEditId = p.id;
+    $('formTitle').textContent = `確認待ちを修正中: ${p.date} ${p.group}`;
+    $('cancelEditButton').hidden = false; $('editFloat').hidden = false;
+    renderPartTabs(); renderCostumePreview();
+    showTab('entry');
+    $('liveEntryForm').scrollIntoView({ behavior: 'smooth' });
+    toast('内容を確認して「保存する」を押すと記録され、確認待ちから消えます');
+  }
+
+  $('tab-pending').addEventListener('click', async e => {
+    const b = e.target.closest('[data-pend]');
+    if (b) {
+      const p = pendingData.find(x => x.id === b.dataset.id);
+      if (!p) return;
+      try {
+        if (b.dataset.pend === 'ok') await confirmPending(p);
+        else if (b.dataset.pend === 'form') openPendingInForm(p);
+        else if (b.dataset.pend === 'reject') { Store.putPending({ ...p, status: 'rejected', rejectedAt: Date.now() }); toast('却下しました（下の「却下したもの」から戻せます）'); }
+        else if (b.dataset.pend === 'restore') { const { rejectedAt, ...rest } = p; Store.putPending({ ...rest, status: 'pending' }); toast('確認待ちに戻しました'); }
+        else if (b.dataset.pend === 'purge') { if (await confirmBox('これを消しますか？次の自動チェックで同じツイートがまた出ることがあります。')) Store.deletePending(p.id); }
+      } catch (err) { writeError(err); }
+      return;
+    }
+    if (e.target.closest('#clearRejected')) {
+      const rej = pendingData.filter(p => p.status === 'rejected');
+      if (!rej.length || !await confirmBox(`却下した${rej.length}件をすべて消しますか？次の自動チェックで同じツイートがまた出ることがあります。`)) return;
+      rej.forEach(p => Store.deletePending(p.id));
+      toast('却下したものを消しました');
+    }
+  });
+
+  // ================= 自動チェック用の窓口 =================
+  // 毎週の自動チェック（Claude がこのページを開いて実行）から使う関数。ログイン中のアカウントのデータだけを読み書きする。
+  const dayStr = ms => new Date(ms + 9 * 3600 * 1000).toISOString().slice(0, 10);
+  const plus1 = d => new Date(Date.parse(d + 'T00:00:00Z') + 86400000).toISOString().slice(0, 10);
+  window.__setoriAuto = {
+    version: 1,
+    // ログインしてデータを読み込み終わったか
+    ready: () => !!Store.uid && Store.mode === 'cloud',
+    // 登録内容（グループ・TimeTreeカレンダー・セトリ用ハッシュタグ・Xアカウント）
+    config() {
+      const groups = [...new Set([...Object.values(cand.timetree.cals || {}), ...Object.keys(cand.setoriTags || {}), ...Object.values(cand.accounts || {})])].filter(Boolean).sort((a, b) => a.localeCompare(b, 'ja'));
+      return { worker: cand.timetree.worker || '', groups: groups.map(g => ({ group: g, cals: calsOf(g), tags: [...(cand.setoriTags[g] || [])], accounts: accountsOf(g) })) };
+    },
+    // Xの検索URL（グループごと：ハッシュタグ／登録アカウントの投稿）。from〜to はライブの日付。投稿は翌日までを含める
+    searchUrls(from, to) {
+      const until = plus1(plus1(to));
+      return this.config().groups.flatMap(g => {
+        const out = [];
+        if (g.tags.length) { const q = g.tags.map(t => '#' + t).join(' OR '); out.push({ group: g.group, kind: 'hashtag', url: 'https://x.com/search?f=live&q=' + encodeURIComponent(`${g.tags.length > 1 ? `(${q})` : q} since:${from} until:${until}`) }); }
+        if (g.accounts.length) { const q = g.accounts.map(a => 'from:' + a).join(' OR '); out.push({ group: g.group, kind: 'account', url: 'https://x.com/search?f=live&q=' + encodeURIComponent(`${g.accounts.length > 1 ? `(${q})` : q} since:${from} until:${until}`) }); }
+        return out;
+      });
+    },
+    // 記録済みのライブ（from〜to）
+    lives(from, to) {
+      return liveData.filter(d => isLive(d) && d.date >= from && d.date <= to)
+        .map(d => ({ id: d.id, date: d.date, group: d.group, liveName: d.liveName || '', venue: d.venue || '', timetreeId: d.timetreeId || ttIdFromUrl((splitTTMemo(d.memo) || {}).url) || '', hasSetlist: hasSetlist(d), attended: attended(d) }));
+    },
+    // TimeTree の予定（登録したすべてのカレンダー・from〜to）
+    async timetree(from, to) {
+      const base = (cand.timetree.worker || '').replace(/\/+$/, '');
+      if (!base) throw new Error('中継サーバーのURLが未設定です');
+      const out = [], errors = [];
+      for (const [alias, group] of Object.entries(cand.timetree.cals || {})) {
+        try {
+          const r = await fetch(`${base}/events/${encodeURIComponent(alias)}?${new URLSearchParams({ from, to })}`);
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          const j = await r.json();
+          (j.public_events || []).forEach(ev => {
+            const date = ttDate(ev);
+            if (!date || date < from || date > to) return;
+            const id = String(ev.id);
+            const live = liveData.find(d => String(d.timetreeId || '') === id || ttIdFromUrl((splitTTMemo(d.memo) || {}).url) === id);
+            out.push({ id, alias, group, date, time: ttStartTime(ev), title: ttTitle(ev.title), venue: canonical(ttVenue(ev), [...view.venues]) || ttVenue(ev), note: String(ev.note || '').trim(), url: ev.url || `https://timetr.ee/p/${alias}/${id}`, notLive: TT_NOT_LIVE.test(ev.title || ''), liveId: live ? live.id : '', hasSetlist: live ? hasSetlist(live) : false });
+          });
+        } catch (err) { errors.push(`${group}（${alias}）: ${err.message}`); }
+      }
+      out.sort((a, b) => a.date.localeCompare(b.date) || (a.time || '').localeCompare(b.time || ''));
+      return { events: out, errors };
+    },
+    // ツイート本文をこのサイトの解析で読み取る（日付・会場・グループ・ライブ名・衣装・曲など）
+    parse(text, opts = {}) {
+      const keep = [tweetPostDate, tweetAccount];
+      tweetPostDate = opts.postDate || ''; tweetAccount = normAcc(opts.account || '');
+      try { const r = parseSetlistText(text); return { ...r, groupOfAccount: groupOfAccount(tweetAccount) }; }
+      finally { [tweetPostDate, tweetAccount] = keep; }
+    },
+    // ツイートの全文・投稿日・アカウント（「さらに表示」の後ろまで）
+    async tweet(url) {
+      const info = await fetchTweetInfo(String(url || '').split('?')[0]);
+      const fromUrl = normAcc((String(url).match(/(?:x|twitter)\.com\/([^/]+)\/status/i) || [])[1]);
+      return { url: String(url).split('?')[0], text: info.text || '', date: info.date || '', account: fromUrl && fromUrl !== 'i' ? fromUrl : normAcc(info.authorUrl), ok: !!info.text };
+    },
+    pending: () => clone(pendingData),
+    // 確認待ちに追加。同じツイート・同じTimeTree予定がすでにあるもの（却下済みも含む）、セトリ記録済みのライブは飛ばす
+    async addPending(items) {
+      if (!Store.uid) throw new Error('ログインしていません');
+      const added = [], skipped = [];
+      const usedUrls = new Set(pendingData.flatMap(p => (p.tweets || []).map(t => tweetId(t.url))).filter(Boolean));
+      const usedTT = new Set(pendingData.map(p => p.timetree && p.timetree.id && String(p.timetree.id)).filter(Boolean));
+      for (const it of [].concat(items || [])) {
+        const why = s => skipped.push({ date: it && it.date, group: it && it.group, reason: s });
+        if (!it || !/^\d{4}-\d{2}-\d{2}$/.test(it.date || '') || !it.group) { why('日付かグループがありません'); continue; }
+        const p = {
+          status: 'pending', source: 'auto', createdAt: Date.now(), date: it.date, group: String(it.group).trim(),
+          liveId: it.liveId || '', timetree: it.timetree && it.timetree.id ? { id: String(it.timetree.id), alias: it.timetree.alias || '', title: it.timetree.title || '', venue: it.timetree.venue || '', time: it.timetree.time || '', note: it.timetree.note || '', url: it.timetree.url || '' } : null,
+          liveName: it.liveName || '', liveType: it.liveType || '', venue: it.venue || '', costume: it.costume || '',
+          setlist: Array.isArray(it.setlist) ? it.setlist.join('\n') : (it.setlist || ''),
+          parts: Array.isArray(it.parts) ? it.parts.map(x => ({ label: x.label || '', costume: x.costume || '', setlist: Array.isArray(x.setlist) ? x.setlist.join('\n') : (x.setlist || '') })) : [],
+          members: Array.isArray(it.members) ? it.members : [],
+          tweets: (it.tweets || []).filter(t => t && tweetId(t.url)).map(t => ({ url: String(t.url).split('?')[0], text: String(t.text || '').slice(0, 2000), account: normAcc(t.account || ''), date: t.date || '' })),
+          reason: it.reason || '',
+        };
+        if (!pendParts(p).some(x => splitSongs(x.setlist).length)) { why('セットリストがありません'); continue; }
+        if (p.tweets.some(t => usedUrls.has(tweetId(t.url)))) { why('同じツイートが確認待ち（または却下済み）にあります'); continue; }
+        if (p.timetree && usedTT.has(p.timetree.id)) { why('同じTimeTreeの予定が確認待ち（または却下済み）にあります'); continue; }
+        const t = pendTarget(p);
+        if (t.live && hasSetlist(t.live) && !it.force) { why('そのライブはもうセトリが記録されています'); continue; }
+        const id = genId();
+        await Store.putPending({ ...p, id });
+        p.tweets.forEach(x => usedUrls.add(tweetId(x.url)));
+        if (p.timetree) usedTT.add(p.timetree.id);
+        added.push({ id, date: p.date, group: p.group, liveName: p.liveName || (p.timetree && p.timetree.title) || '' });
+      }
+      return { added, skipped };
+    },
+    today: () => dayStr(Date.now()),
+  };
+
   // ================= 描画まとめ =================
   function renderAll() {
     rebuildView();
@@ -3718,6 +4024,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     renderCostumePreview();
     renderImgModal();
     renderTTGroups();
+    renderPending();
     updateXSearchBtn();
   }
 
