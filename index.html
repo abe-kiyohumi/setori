@@ -327,6 +327,12 @@ body.scope-all .top { box-shadow: inset 0 -3px 0 var(--warn-soft); }
   .edit-float:focus-visible { outline: 3px solid var(--accent-soft); }
   .cpick { margin: 0 8px 0 0; vertical-align: middle; width: 18px; height: 18px; accent-color: var(--accent); }
   .pickbar { border-style: solid; border-color: var(--accent); background: var(--accent-soft); }
+  .cl-row { flex-direction: column; align-items: stretch !important; gap: 6px !important; }
+  .cl-items { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+  .cl-item { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+  .cl-item input { width: 18px; height: 18px; accent-color: var(--accent); margin: 0; }
+  .cl-act { flex-wrap: wrap; gap: 6px; align-items: center; }
+  .cl-act .cl-to { flex: 1 1 200px; width: auto; }
 </style>
 </head>
 <body class="signed-out">
@@ -2746,11 +2752,15 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     items.forEach(v => { const key = loose(v); if (!key) return; if (!groupsByKey.has(key)) groupsByKey.set(key, []); groupsByKey.get(key).push(v); });
     const dups = [...groupsByKey.values()].filter(a => a.length > 1);
     const sims = similarClusters(k, g, items);
-    const dupRow = a => `<div class="dup">${a.map(v => `<button type="button" class="btn sm" data-merge="${esc(k)}" data-to="${esc(v)}" data-from="${esc(JSON.stringify(a.filter(x => x !== v)))}">「${esc(v)}」${uses.get(v) || 0}件 → これに統一</button>`).join('')}`;
-    $('dup-' + k).innerHTML = (dups.length ? `<div class="dupbox"><b>表記ゆれかもしれない${LABEL[k]}が${dups.length}組あります。残す方の「これに統一」を押すと、ライブの記録もまとめて書き換えます。</b>
-      ${dups.map(a => dupRow(a) + '</div>').join('')}</div>` : '')
-      + (sims.length ? `<div class="dupbox"><b>似ている${LABEL[k]}が${sims.length}組あります。同じものなら残す方の「これに統一」、違うものなら「別のもの」を押してください。</b>
-      ${sims.map(a => dupRow(a) + `<button type="button" class="btn sm" data-simskip="${esc(k)}" data-items="${esc(JSON.stringify(a))}">別のもの</button></div>`).join('')}</div>` : '')
+    // 1組ごとに「まとめるもの」をチェックで選び、「どれに合わせるか」を選んで統一する
+    const dupRow = (a, checked, skip) => `<div class="dup cl-row" data-clk="${esc(k)}">
+        <div class="cl-items">${a.map(v => `<label class="cl-item"><input type="checkbox" class="cl-chk" value="${esc(v)}" ${checked ? 'checked' : ''}><span>「${esc(v)}」<span class="uses">${uses.get(v) || 0}件</span></span></label>`).join('')}</div>
+        <div class="row cl-act"><select class="field cl-to" aria-label="どれに合わせるか">${(top => a.map(v => `<option value="${esc(v)}" ${v === top ? 'selected' : ''}>「${esc(v)}」に合わせる</option>`).join(''))(a.reduce((x, y) => (uses.get(y) || 0) > (uses.get(x) || 0) ? y : x))}</select>
+        <button type="button" class="btn sm primary" data-clmerge="${esc(k)}">チェックしたものを統一</button>${skip ? `<button type="button" class="btn sm" data-simskip="${esc(k)}" data-items="${esc(JSON.stringify(a))}">この組は別のもの</button>` : ''}</div></div>`;
+    $('dup-' + k).innerHTML = (dups.length ? `<div class="dupbox"><b>表記ゆれかもしれない${LABEL[k]}が${dups.length}組あります。まとめるものにチェックを付け、どれに合わせるかを選んで「チェックしたものを統一」を押すと、ライブの記録もまとめて書き換えます。</b>
+      ${dups.map(a => dupRow(a, true, false)).join('')}</div>` : '')
+      + (sims.length ? `<div class="dupbox"><b>似ている${LABEL[k]}が${sims.length}組あります。同じものだけにチェックを付け、どれに合わせるかを選んで統一してください。全部違うものなら「この組は別のもの」で出さないようにできます。</b>
+      ${sims.map(a => dupRow(a, false, true)).join('')}</div>` : '')
       + pickBarHTML(k, items, uses);
     // 一覧（絞り込み）
     const q = $('q-' + k).value.trim();
@@ -2878,6 +2888,16 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       const k = d.merge, g = scopeGroup(k), to = d.to, froms = JSON.parse(d.from);
       const uses = usageCounts(k, g), n = froms.reduce((a, f) => a + (uses.get(f) || 0), 0);
       if (!await confirmBox(`${froms.map(f => `「${f}」`).join('')}を「${to}」に統一しますか？${n ? `\n${n}件のライブの記録も書き換えます。` : ''}`)) return;
+      const changed = renameEverywhere(k, g, froms, to);
+      toast(`「${to}」に統一しました${changed ? `（${changed}件のライブを更新）` : ''}`);
+    } else if (d.clmerge) {
+      const k = d.clmerge, g = scopeGroup(k), row = t.closest('.cl-row');
+      const to = row.querySelector('.cl-to').value;
+      const picked = [...row.querySelectorAll('.cl-chk:checked')].map(c => c.value);
+      const froms = picked.filter(x => x !== to);
+      if (!froms.length) return toast(picked.length ? '合わせる先以外のものにもチェックを付けてください' : 'まとめるものにチェックを付けてください', 'error');
+      const uses = usageCounts(k, g), n = froms.reduce((s2, f) => s2 + (uses.get(f) || 0), 0);
+      if (!await confirmBox(`${froms.map(f => `「${f}」`).join('')}を「${to}」に統一しますか？${n ? `\n${n}件のライブの記録も書き換えます。` : ''}\n（チェックしていないものはそのまま残ります）`)) return;
       const changed = renameEverywhere(k, g, froms, to);
       toast(`「${to}」に統一しました${changed ? `（${changed}件のライブを更新）` : ''}`);
     } else if (d.simskip) {
@@ -3691,6 +3711,9 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   // ================= バージョン・更新履歴 =================
   // 新しい機能を追加したら、いちばん上に1件足して番号を上げる
   const VERSIONS = [
+    { v: '2.9', date: '2026/11/16', items: [
+      '表記ゆれ・似ている候補は、まとめるものをチェックで選び、どれに合わせるかを選んで統一する方式に（チェックしていないものは残る）',
+    ] },
     { v: '2.8', date: '2026/11/16', items: [
       '「似ている候補」に、短い名前がまるごと入っているもの（「窓枠」と「Live House 浜松窓枠」など）も出す',
       'フェスのステージ名（〇〇ステージ）は、完全に同じとき以外は似ている候補に出さない',
