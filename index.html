@@ -2676,42 +2676,36 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     toast(`カバー曲の書き方をそろえました（ライブ${lives.length}件）`);
   });
 
-  // ----- 似ている候補（表記ゆれより広く：一方がもう一方を含む・文字の並びがよく似ている） -----
-  const bigrams = s => { const a = []; for (let i = 0; i < s.length - 1; i++) a.push(s.slice(i, i + 2)); return a; };
-  function dice(a, b) {
-    const A = bigrams(a), Bl = bigrams(b);
-    if (!A.length || !Bl.length) return 0;
-    const B = new Map(); Bl.forEach(x => B.set(x, (B.get(x) || 0) + 1));
-    let hit = 0; A.forEach(x => { const n = B.get(x); if (n) { hit++; B.set(x, n - 1); } });
-    return 2 * hit / (A.length + Bl.length);
-  }
-  // 会場は「Live House 浜松窓枠」と「窓枠」のように、よくある言葉を除いて比べる
-  const VENUE_WORDS = /livehouse|ライブハウス|らいぶはうす|特設会場|特設ステージ|野外ステージ/g;
-  function similarCand(k, a, b) {
-    let la = loose(a), lb = loose(b);
-    if (k === 'venues') { la = la.replace(VENUE_WORDS, '') || la; lb = lb.replace(VENUE_WORDS, '') || lb; }
-    if (!la || !lb || la === lb) return la === lb && loose(a) !== loose(b);
-    if (k === 'venues' || k === 'groups' || k === 'liveTypes') {
-      const [sh, lo] = la.length <= lb.length ? [la, lb] : [lb, la];
-      if (sh.length >= 2 && lo.includes(sh)) return true;
+  // ----- 似ている候補：大文字小文字・記号・スペースをそろえたうえで、8割以上同じ文字のもの -----
+  function levenshtein(a, b) {
+    let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+    for (let i = 1; i <= a.length; i++) {
+      const cur = [i];
+      for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      prev = cur;
     }
-    return dice(la, lb) >= (k === 'song' ? 0.8 : 0.7);
+    return prev[b.length];
+  }
+  const SIM_RATE = 0.8;
+  function similarCand(k, a, b) {
+    const la = loose(a), lb = loose(b);
+    if (!la || !lb || la === lb) return false; // 完全に同じになるものは「表記ゆれ」の方で出す
+    const long = Math.max(la.length, lb.length);
+    if (Math.min(la.length, lb.length) / long < SIM_RATE) return false; // 長さが大きく違えば別物
+    return 1 - levenshtein(la, lb) / long >= SIM_RATE;
   }
   const simKey = (k, g, a, b) => 'cand|' + k + '|' + (g || '') + '|' + [a, b].sort().join('|');
   function similarClusters(k, g, items) {
     if (items.length > 600) return [];
     const ignore = new Set(cand.mergeIgnore || []);
-    const parent = new Map(items.map(v => [v, v]));
-    const find = v => { while (parent.get(v) !== v) v = parent.get(v); return v; };
-    for (let i = 0; i < items.length; i++) for (let j = i + 1; j < items.length; j++) {
-      const a = items[i], b = items[j];
-      if (loose(a) === loose(b)) continue; // 表記ゆれの方で出す
-      if (ignore.has(simKey(k, g, a, b)) || !similarCand(k, a, b)) continue;
-      parent.set(find(a), find(b));
-    }
-    const groups = new Map();
-    items.forEach(v => { const r = find(v); if (!groups.has(r)) groups.set(r, []); groups.get(r).push(v); });
-    return [...groups.values()].filter(a => a.length > 1);
+    // つながりをたどって広げない：1つの候補と、それに直接似ているものだけを1組にする
+    const used = new Set(), out = [];
+    items.forEach(a => {
+      if (used.has(a)) return;
+      const grp = [a, ...items.filter(b => b !== a && !used.has(b) && !ignore.has(simKey(k, g, a, b)) && similarCand(k, a, b))];
+      if (grp.length > 1) { grp.forEach(x => used.add(x)); out.push(grp); }
+    });
+    return out;
   }
   // ----- 一覧で選んだ候補を1つに統一（カタカナと英語の違いなど、自動で見つからないもの用） -----
   const candPick = {};
@@ -3691,6 +3685,9 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   // ================= バージョン・更新履歴 =================
   // 新しい機能を追加したら、いちばん上に1件足して番号を上げる
   const VERSIONS = [
+    { v: '2.7', date: '2026/11/16', items: [
+      '「似ている候補」の範囲をせまく：大文字小文字・記号・スペースをそろえて8割以上同じ文字のものだけ（「NAGOYA」が付くだけでは出ない）',
+    ] },
     { v: '2.6', date: '2026/11/16', items: [
       '候補の管理に「セトリ検索の言葉」と「Xの検索（確認用）」を追加（サイトから検索の内容を管理）',
       'セトリの検索を「登録したアカウントの投稿（from検索）のうち、ハッシュタグか検索の言葉を含むもの」に変更',
