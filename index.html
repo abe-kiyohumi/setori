@@ -3150,7 +3150,23 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       return { label, costume, songs: b.songs };
     });
   }
+  // セトリより後ろにある「次のライブは〜」「今後のスケジュール」などの告知は、日付・会場・曲として読まない
+  const ANNOUNCE_RE = /^[\s✧•─━―\-=＝~〜♡┈୨୧.｡⌒‥∵＼／\/☆★◆◇■□▼▽▶︎👇⬇️]*(?:次のライブ|次回|今後のライブ|今後の出演|今後のスケジュール|ライブスケジュール|出演スケジュール|スケジュール|告知|お知らせ|日本のライブ|明日のライブ|チケット(?:は|発売|予約)|ご予約|予約はこちら)/;
+  function cutAnnouncement(text) {
+    const ls = String(text || '').split('\n');
+    const isSong = l => SONG_PATTERNS.some(re => re.test(l.trim())) && !NOT_SONG.test(l.trim());
+    const first = ls.findIndex(isSong);
+    if (first < 0) return text;
+    for (let i = first + 1; i < ls.length; i++) {
+      if (!ANNOUNCE_RE.test(ls[i].trim())) continue;
+      let cut = i;
+      while (cut > first + 1 && /^[\s✧•─━―\-=＝~〜♡┈୨୧.｡⌒‥∵]*$/.test(ls[cut - 1])) cut--; // 直前の区切り線も
+      return ls.slice(0, cut).join('\n') + '\n' + ls.slice(i).filter(l => /^\s*([#＃]\S+\s*)+$/.test(l)).join('\n');
+    }
+    return text;
+  }
   function parseSetlistText(text) {
+    text = cutAnnouncement(text);
     const r = { date: '', dateSource: '', venue: '', group: '', groupSource: '', liveName: '', liveType: '', costume: '', members: [], songs: [], newSongs: [], hashtags: [], absent: '', hints: [] };
     const cleaned = String(text || '').replace(/https?:\/\/\S+/g, '').replace(/pic\.twitter\.com\/\S+/g, '').replace(/\r/g, '');
     r.hashtags = [...cleaned.matchAll(/[#＃]([^\s#＃]+)/g)].map(m => m[1]);
@@ -3277,6 +3293,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       else if (norm(dateRest) !== norm(r.venue)) liveName = dateRest;
     }
     r.liveName = liveName.replace(/[#＃]\S+/g, '').trim();
+    if (!/[\p{L}\p{N}]/u.test(r.liveName)) r.liveName = '';
     const types = [...view.liveTypes];
     if (label.liveType) r.liveType = canonical(label.liveType, types) || label.liveType;
     if (!r.liveType) r.liveType = guessLiveType(r.liveName, r.group, lines.filter((_, i) => !songLines.some(s => s.i === i)).join('\n'));
@@ -3824,6 +3841,10 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   // ================= バージョン・更新履歴 =================
   // 新しい機能を追加したら、いちばん上に1件足して番号を上げる
   const VERSIONS = [
+    { v: '3.5', date: '2026/11/16', items: [
+      'セトリの後ろにある「次のライブは〜」などの告知は、日付・会場・曲として読まないように',
+      '自動チェックの照らし合わせ（ツイートとTimeTreeの予定・記録済みのライブ）をサイトに組み込み',
+    ] },
     { v: '3.4', date: '2026/11/16', items: [
       '絞り込みに「書き込み状況」（セトリ書き込み済み・セトリ未書き込み・衣装 未書き込み）',
       'セトリがまだないライブに「セトリ未記入」の印',
@@ -4202,6 +4223,64 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       // 引用元は、登録アカウント（引用した側と同じグループ）の投稿のときだけ返す
       const quote = q && quoteAllowed(account, q) ? { ...q, group: groupOfAccount(q.account) } : null;
       return { url: String(url).split('?')[0], text: info.text || '', date: info.date || '', account, group: groupOfAccount(account), ok: !!info.text, quote, quoteSkipped: !!(q && !quote) };
+    },
+    // 読み込んだツイート（tweet() の結果の配列）を、TimeTreeの予定・記録済みのライブと照らし合わせる
+    //  返り値：{ items: addPending にそのまま渡せるもの, report: 1件ずつの結果 }
+    async matchTweets(tweets, from, to) {
+      const ttr = await this.timetree(from, to), lv = this.lives(from, to);
+      const N = x => String(x || '').normalize('NFKC').toLowerCase().replace(/[\s　・\-－_!！?？「」『』【】()（）\[\]"'“”]/g, '');
+      const core = x => N(x).replace(/20\d\d$/, '').replace(/(vol|#|no)\.?\d+.*$/, '');
+      const shift = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 86400000).toISOString().slice(0, 10);
+      const cands = (group, date) => {
+        const ev = ttr.events.filter(e => e.group === group && e.date === date && !e.notLive);
+        const ls = lv.filter(l => l.group === group && l.date === date && !ev.some(e => e.liveId === l.id || (l.timetreeId && String(l.timetreeId) === e.id)));
+        return [...ev.map(e => ({ tt: e, name: e.title, venue: e.venue, liveId: e.liveId, hasSetlist: e.hasSetlist })), ...ls.map(l => ({ tt: null, name: l.liveName, venue: l.venue, liveId: l.id, hasSetlist: l.hasSetlist }))];
+      };
+      const score = (c, text) => { const t = N(text); let n = 0; const nm = core(c.name), vn = N(c.venue);
+        if (nm.length >= 3 && t.includes(nm)) n += 3; if (vn.length >= 3 && t.includes(vn.slice(0, 8))) n += 2; return n; };
+      const items = [], report = [];
+      for (const tw of tweets) {
+        const head = String(tw.text || '').split('\n').slice(0, 2).join(' / ').slice(0, 60);
+        const rep = { url: tw.url, group: tw.group || '', head };
+        if (!tw.ok || !tw.group) { report.push({ ...rep, status: '登録アカウントのツイートではない' }); continue; }
+        const r = this.parse(tw.text, { postDate: tw.date, account: tw.account });
+        const q = tw.quote ? this.parse(tw.quote.text, { postDate: tw.quote.date, account: tw.quote.account }) : null;
+        if ((r.songs || []).length < 2) { report.push({ ...rep, status: 'セトリなし（画像のみ・告知など）' }); continue; }
+        const text = tw.text + '\n' + (tw.quote ? tw.quote.text : '');
+        const explicit = r.dateSource !== 'ツイートの投稿日';
+        let date = r.date;
+        if (!explicit && q && q.date && q.dateSource !== 'ツイートの投稿日') date = q.date;
+        let liveDate = date, cs = cands(tw.group, date);
+        if (!cs.length) {
+          // 夜中の投稿（日付なし）は前の日のライブ。日付があって前の日に始まる2日間の予定（TimeTree）にも合わせる
+          const prev = cands(tw.group, shift(date, -1)).filter(c => !explicit || c.tt);
+          if (prev.length) { cs = prev; if (!explicit) liveDate = shift(date, -1); }
+        }
+        rep.date = liveDate;
+        if (!cs.length) { report.push({ ...rep, status: '同じ日の予定・記録がない' }); continue; }
+        let pick = null;
+        if (cs.length === 1 || cs.every(c => N(c.name) === N(cs[0].name))) pick = cs.find(c => c.liveId) || cs[0];
+        else { const sc = cs.map(c => [c, score(c, text)]).sort((a, b) => b[1] - a[1]); if (sc[0][1] > 0 && sc[0][1] > sc[1][1]) pick = sc[0][0]; }
+        if (!pick) { report.push({ ...rep, status: `同じ日に${cs.length}件あり判断できない（${cs.map(c => c.name).join('／')}）` }); continue; }
+        if (pick.hasSetlist) { report.push({ ...rep, status: `セトリ記録済み（${pick.name}）` }); continue; }
+        const secs = r.sections || [];
+        items.push({
+          date: liveDate, group: tw.group, liveId: pick.liveId || '',
+          timetree: pick.tt ? { id: pick.tt.id, alias: pick.tt.alias, title: pick.tt.title, venue: pick.tt.venue, time: pick.tt.time, note: pick.tt.note, url: pick.tt.url } : null,
+          liveName: r.liveName || (q && q.liveName) || '', liveType: r.liveType || (q && q.liveType) || '', venue: r.venue || (q && q.venue) || '', costume: r.costume || '',
+          setlist: secs.length > 1 ? [] : r.songs, parts: secs.length > 1 ? secs.map(x => ({ label: x.label, costume: x.costume, setlist: x.songs })) : undefined,
+          members: r.members || [],
+          tweets: [{ url: tw.url, text: tw.text, account: tw.account, date: tw.date }, ...(tw.quote ? [{ url: tw.quote.url, text: tw.quote.text, account: tw.quote.account, date: tw.quote.date }] : [])],
+          reason: `${pick.tt ? 'TimeTree' : '記録済みのライブ'}「${pick.name}」（${liveDate}）と @${tw.account} のセトリの日付${cs.length > 1 ? '・ライブ名／会場' : ''}が一致`,
+        });
+        report.push({ ...rep, status: `一致（${pick.name}）${secs.length > 1 ? `・${secs.length}ステージ` : ''}`, songs: r.songs.length });
+      }
+      // 同じライブに複数のセトリツイートがあるときは、曲がいちばん多いものを使い、ほかのツイートはリンクとして加える
+      const byKey = new Map();
+      items.forEach(it => { const k = (it.timetree && it.timetree.id) || it.liveId || it.date + it.group; const cur = byKey.get(k);
+        const n = x => (x.parts ? x.parts.reduce((a, p) => a + p.setlist.length, 0) : x.setlist.length);
+        if (!cur) byKey.set(k, it); else { const [keep, drop] = n(it) > n(cur) ? [it, cur] : [cur, it]; keep.tweets = [...keep.tweets, ...drop.tweets.filter(t => !keep.tweets.some(x => x.url === t.url))]; byKey.set(k, keep); } });
+      return { items: [...byKey.values()], report, ttErrors: ttr.errors };
     },
     pending: () => clone(pendingData),
     // 確認待ちに追加。同じツイート・同じTimeTree予定がすでにあるもの（却下済みも含む）、セトリ記録済みのライブは飛ばす
