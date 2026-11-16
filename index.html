@@ -1453,14 +1453,23 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       const fx = await getJSON(`https://api.fxtwitter.com/${encodeURIComponent(user)}/status/${id}`);
       const t = fx && fx.tweet;
       if (t && (t.text || t.raw_text?.text)) {
-        return { text: cleanTweetText(t.text || t.raw_text.text), date: t.created_timestamp ? ymd(t.created_timestamp) : '', author: t.author?.name || '', authorUrl: t.author?.screen_name ? `https://x.com/${t.author.screen_name}` : '', source: 'fx' };
+        const q = t.quote;
+        const quote = q && (q.text || q.raw_text?.text) && q.author?.screen_name ? { url: q.url || `https://x.com/${q.author.screen_name}/status/${q.id}`, text: cleanTweetText(q.text || q.raw_text.text), date: q.created_timestamp ? ymd(q.created_timestamp) : '', account: normAcc(q.author.screen_name) } : null;
+        return { text: cleanTweetText(t.text || t.raw_text.text), date: t.created_timestamp ? ymd(t.created_timestamp) : '', author: t.author?.name || '', authorUrl: t.author?.screen_name ? `https://x.com/${t.author.screen_name}` : '', source: 'fx', quote };
       }
       const vx = await getJSON(`https://api.vxtwitter.com/${encodeURIComponent(user)}/status/${id}`);
       if (vx && vx.text) {
-        return { text: cleanTweetText(vx.text), date: vx.date_epoch ? ymd(vx.date_epoch) : '', author: vx.user_name || '', authorUrl: vx.user_screen_name ? `https://x.com/${vx.user_screen_name}` : '', source: 'vx' };
+        const q = vx.qrt;
+        const quote = q && q.text && q.user_screen_name ? { url: q.tweetURL || `https://x.com/${q.user_screen_name}/status/${q.tweetID}`, text: cleanTweetText(q.text), date: q.date_epoch ? ymd(q.date_epoch) : '', account: normAcc(q.user_screen_name) } : null;
+        return { text: cleanTweetText(vx.text), date: vx.date_epoch ? ymd(vx.date_epoch) : '', author: vx.user_name || '', authorUrl: vx.user_screen_name ? `https://x.com/${vx.user_screen_name}` : '', source: 'vx', quote };
       }
     }
     return fetchTweetOembed(url);
+  }
+  function quoteAllowed(account, quote) {
+    if (!quote || !quote.text) return false;
+    const qg = groupOfAccount(quote.account), g = groupOfAccount(account);
+    return !!qg && (!g || g === qg);
   }
   // 末尾の画像・リンクの短縮URL（t.co）を取り除く
   const cleanTweetText = t => String(t || '').replace(/\s*https?:\/\/t\.co\/\S+/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').trim();
@@ -3415,7 +3424,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   }
   $('parseTweetBtn').addEventListener('click', runParse);
   function renderLoaded() {
-    $('tweetLoaded').innerHTML = loadedTweets.map(t => `<span class="chip ${t.ok ? '' : 'off'}" title="${esc(t.url)}">${t.ok ? '✓' : '×'} ${esc(t.account ? '@' + t.account : 'ツイート')}${t.date ? ' ' + esc(fmtDate(t.date)) : ''}${t.ok ? '' : '（読み込めませんでした）'}</span>`).join('');
+    $('tweetLoaded').innerHTML = loadedTweets.map(t => `<span class="chip ${t.ok ? '' : 'off'}" title="${esc(t.url)}">${t.ok ? '✓' : '×'} ${t.quoted ? '引用元 ' : ''}${esc(t.account ? '@' + t.account : 'ツイート')}${t.date ? ' ' + esc(fmtDate(t.date)) : ''}${t.ok ? '' : '（読み込めませんでした）'}</span>`).join('');
   }
   let lastFetched = '';
   async function loadFromUrl() {
@@ -3430,8 +3439,18 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
         const info = await fetchTweetInfo(url);
         btn.textContent = `読み込み中… ${++done}/${urls.length}`;
         const fromUrl = normAcc((url.match(/(?:x|twitter)\.com\/([^/]+)\/status/i) || [])[1]);
-        return { url, text: info.text, date: info.date, account: fromUrl && fromUrl !== 'i' ? fromUrl : normAcc(info.authorUrl), ok: !!info.text };
+        return { url, text: info.text, date: info.date, account: fromUrl && fromUrl !== 'i' ? fromUrl : normAcc(info.authorUrl), ok: !!info.text, quote: info.quote || null };
       }));
+      // 引用リツイートなら、引用元も登録アカウントの投稿のときだけ読み込む
+      let qSkip = 0;
+      for (let i = infos.length - 1; i >= 0; i--) {
+        const q = infos[i].quote;
+        if (!q || !q.text) continue;
+        if (!quoteAllowed(infos[i].account, q)) { qSkip++; continue; }
+        if (infos.some(t => tweetId(t.url) === tweetId(q.url))) continue;
+        infos.splice(i + 1, 0, { url: q.url, text: q.text, date: q.date, account: q.account, ok: true, quoted: true });
+      }
+      if (qSkip) setTimeout(() => toast(`引用元のツイート${qSkip}件は、登録したアカウントの投稿ではないため読み込みませんでした`), 2800);
       loadedTweets = infos; renderLoaded();
       const ok = infos.filter(t => t.ok);
       if (!ok.length) {
@@ -3779,6 +3798,9 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   // ================= バージョン・更新履歴 =================
   // 新しい機能を追加したら、いちばん上に1件足して番号を上げる
   const VERSIONS = [
+    { v: '3.1', date: '2026/11/16', items: [
+      '引用リツイートのとき、引用元も登録したアカウントの投稿なら一緒に読み込む（記録する・自動チェック）',
+    ] },
     { v: '3.0', date: '2026/11/16', items: [
       '編集中は、セットリストが空でも「更新する」で保存できるように（日付とグループだけ必須）',
       '画面の右端の「編集をやめる」の上に「更新する」ボタン',
@@ -4140,7 +4162,10 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       const info = await fetchTweetInfo(String(url || '').split('?')[0]);
       const fromUrl = normAcc((String(url).match(/(?:x|twitter)\.com\/([^/]+)\/status/i) || [])[1]);
       const account = normAcc(info.authorUrl) || (fromUrl !== 'i' ? fromUrl : '');
-      return { url: String(url).split('?')[0], text: info.text || '', date: info.date || '', account, group: groupOfAccount(account), ok: !!info.text };
+      const q = info.quote;
+      // 引用元は、登録アカウント（引用した側と同じグループ）の投稿のときだけ返す
+      const quote = q && quoteAllowed(account, q) ? { ...q, group: groupOfAccount(q.account) } : null;
+      return { url: String(url).split('?')[0], text: info.text || '', date: info.date || '', account, group: groupOfAccount(account), ok: !!info.text, quote, quoteSkipped: !!(q && !quote) };
     },
     pending: () => clone(pendingData),
     // 確認待ちに追加。同じツイート・同じTimeTree予定がすでにあるもの（却下済みも含む）、セトリ記録済みのライブは飛ばす
