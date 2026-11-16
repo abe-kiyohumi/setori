@@ -336,6 +336,17 @@ body.scope-all .top { box-shadow: inset 0 -3px 0 var(--warn-soft); }
   .cl-item input { width: 18px; height: 18px; accent-color: var(--accent); margin: 0; }
   .cl-act { flex-wrap: wrap; gap: 6px; align-items: center; }
   .cl-act .cl-to { flex: 1 1 200px; width: auto; }
+  /* 長い名前でも枠からはみ出さないように（全部見えるように折り返す） */
+  .cl-items { min-width: 0; }
+  .cl-item { max-width: 100%; min-width: 0; align-items: flex-start; }
+  .cl-item input { flex-shrink: 0; margin-top: 3px; }
+  .cl-item > span { min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
+  .cl-act { min-width: 0; }
+  .cl-act .cl-to { min-width: 0; max-width: 100%; width: 100%; text-overflow: ellipsis; }
+  .cand li { flex-wrap: wrap; }
+  .cand li > span:first-child { flex: 1 1 170px; overflow-wrap: anywhere; word-break: break-word; }
+  .cand .ops { flex-wrap: wrap; margin-left: auto; }
+  .dupbox, .dupbox .dup { min-width: 0; overflow-wrap: anywhere; }
 </style>
 </head>
 <body class="signed-out">
@@ -3798,6 +3809,9 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   // ================= バージョン・更新履歴 =================
   // 新しい機能を追加したら、いちばん上に1件足して番号を上げる
   const VERSIONS = [
+    { v: '3.2', date: '2026/11/16', items: [
+      '候補の管理で、長い名前（会場など）が枠からはみ出さず全部見えるように折り返して表示',
+    ] },
     { v: '3.1', date: '2026/11/16', items: [
       '引用リツイートのとき、引用元も登録したアカウントの投稿なら一緒に読み込む（記録する・自動チェック）',
     ] },
