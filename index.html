@@ -347,6 +347,7 @@ body.scope-all .top { box-shadow: inset 0 -3px 0 var(--warn-soft); }
   .cand li > span:first-child { flex: 1 1 170px; overflow-wrap: anywhere; word-break: break-word; }
   .cand .ops { flex-wrap: wrap; margin-left: auto; }
   .dupbox, .dupbox .dup { min-width: 0; overflow-wrap: anywhere; }
+  .tag.nosl { background: var(--warn-soft); color: var(--warn); }
 </style>
 </head>
 <body class="signed-out">
@@ -580,6 +581,12 @@ body.scope-all .top { box-shadow: inset 0 -3px 0 var(--warn-soft); }
       <div id="attFilterBox" hidden><label class="lbl" for="attFilter">参加</label><select id="attFilter" class="field"><option value="all">すべて</option><option value="yes">行ったライブ</option><option value="no">行っていないライブ</option></select></div>
       <div id="kindFilterBox"><label class="lbl" for="kindFilter">記録の種類</label><select id="kindFilter" class="field"><option value="all">すべて</option><option value="live">ライブ</option><option value="cheki">チェキ会・特典会のみ</option><option value="online">オンラインチェキ</option></select></div>
       <div><label class="lbl" for="typeFilter">ライブの種類</label><select id="typeFilter" class="field"><option value="all">すべて</option></select></div>
+      <div><label class="lbl" for="fillFilter">書き込み状況</label><select id="fillFilter" class="field">
+        <option value="all">すべて</option>
+        <option value="setlist">セトリ書き込み済み</option>
+        <option value="nosetlist">セトリ未書き込み</option>
+        <option value="nocostume">衣装 未書き込み</option>
+      </select></div>
     </div>
     <details id="moreFilters">
       <summary class="hint" style="cursor:pointer">日付・曲・会場・衣装・メンバーで絞り込む</summary>
@@ -929,6 +936,9 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   let hideFuture = false, calMonth = '';
   try { hideFuture = localStorage.getItem('setori-hide-future') === '1'; } catch (e) { }
   const todayStr = () => new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+  let fFill = 'all';
+  const hasCostume = d => partsOf(d).some(p => p.costume);
+  const fillOk = d => fFill === 'all' || (isLive(d) && (fFill === 'setlist' ? hasSetlist(d) : fFill === 'nosetlist' ? !hasSetlist(d) : !hasCostume(d)));
   let fKind = 'all', fType = 'all', fFrom = '', fTo = '', fSong = '', fVenue = '', fCostume = '', fMember = '';
   let lineupMap = new Map();        // key → 体制（名前・期間付き）
   let liveLineup = new Map();       // ライブID → 体制key
@@ -1782,7 +1792,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     const has = (v, q) => !q || norm(v).includes(norm(q));
     return liveData.filter(d => inScope(d) && (fAtt === 'all' || (fAtt === 'yes') === attended(d)) && (fYear === 'all' || (d.date || '').slice(0, 4) === fYear) && (fGroup === 'all' || (d.group || '').trim() === fGroup)
       && (fLineup === 'all' || liveLineup.get(d.id) === fLineup)
-      && (fKind === 'all' || kindOf(d) === fKind)
+      && (fKind === 'all' || kindOf(d) === fKind) && fillOk(d)
       && (fType === 'all' || (fType === '__none' ? !d.liveType : d.liveType === fType))
       && (!fFrom || (d.date || '') >= fFrom) && (!fTo || (d.date || '') <= fTo)
       && (!hideFuture || fFrom === fTo && fFrom || (d.date || '') <= todayStr())
@@ -1811,7 +1821,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       <div class="meta">
         <span class="date">${esc(d.date)}</span>
         <span class="name">${esc(d.liveName || d.liveType || 'ライブ')}</span>
-        <span class="sub">${scope === 'all' ? (attended(d) ? '<span class="tag att">行った</span>' : '<span class="tag noatt">行っていない</span>') : ''}${d.liveType ? `<span class="tag">${esc(d.liveType)}</span>` : ''}<span class="tag parts">${ps.length}ステージ</span><b>${esc(d.group || '—')}</b> ／ ${esc(d.venue || '会場未記録')}</span>
+        <span class="sub">${scope === 'all' ? (attended(d) ? '<span class="tag att">行った</span>' : '<span class="tag noatt">行っていない</span>') : ''}${isLive(d) && !hasSetlist(d) ? '<span class="tag nosl">セトリ未記入</span>' : ''}${d.liveType ? `<span class="tag">${esc(d.liveType)}</span>` : ''}<span class="tag parts">${ps.length}ステージ</span><b>${esc(d.group || '—')}</b> ／ ${esc(d.venue || '会場未記録')}</span>
         ${memberLine(d)}
         ${ps.map((p, i) => `<div class="part-block"><span class="plabel">${esc(partName(p, i))}${p.costume ? `<span class="note" style="font-weight:400;color:var(--muted)"> ／ 衣装: ${esc(p.costume)}</span>` : ''}</span>${partHTML(d, p, deleted, false)}${deleted ? '' : `<div><button type="button" class="btn sm" data-act="cheki-part" data-id="${esc(d.id)}" data-part="${i}">＋このステージのチェキを追加</button></div>`}</div>`).join('')}
         ${deleted ? '' : memoHTML(d)}
@@ -1844,7 +1854,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       <div class="meta">
         <span class="date">${esc(d.date)}</span>
         <span class="name">${esc(d.liveName || d.liveType || 'ライブ')}</span>
-        <span class="sub">${scope === 'all' ? (attended(d) ? '<span class="tag att">行った</span>' : '<span class="tag noatt">行っていない</span>') : ''}${d.liveType ? `<span class="tag">${esc(d.liveType)}</span>` : ''}<b>${esc(d.group || '—')}</b> ／ ${esc(d.venue || '会場未記録')} ／ 衣装: ${esc(d.costume || '未記録')}</span>
+        <span class="sub">${scope === 'all' ? (attended(d) ? '<span class="tag att">行った</span>' : '<span class="tag noatt">行っていない</span>') : ''}${isLive(d) && !hasSetlist(d) ? '<span class="tag nosl">セトリ未記入</span>' : ''}${d.liveType ? `<span class="tag">${esc(d.liveType)}</span>` : ''}<b>${esc(d.group || '—')}</b> ／ ${esc(d.venue || '会場未記録')} ／ 衣装: ${esc(d.costume || '未記録')}</span>
         ${d.costume && !deleted && imgsOf(d.group, d.costume).length ? `<div class="thumbs">${imgsOf(d.group, d.costume).slice(0, 4).map(x => thumbTag(x, 'sm')).join('')}</div>` : ''}
         ${memberLine(d)}
         ${cheki ? `<span class="sub">チェキ: ${cheki}</span>` : ''}
@@ -2207,10 +2217,11 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     $('typeFilter').innerHTML = '<option value="all">すべて</option>' + types.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('')
       + (liveData.some(d => !d.liveType) ? '<option value="__none">（未設定）</option>' : '');
     $('typeFilter').value = fType;
-    $('kindFilter').value = fKind; $('attFilter').value = fAtt;
+    $('kindFilter').value = fKind; $('attFilter').value = fAtt; $('fillFilter').value = fFill;
     const conds = [fAtt !== 'all' && (fAtt === 'yes' ? '行ったライブ' : '行っていないライブ'), fKind !== 'all' && KIND_LABEL[fKind], fYear !== 'all' && `${fYear}年`, fGroup !== 'all' && fGroup, fLineup !== 'all' && lineupMap.get(fLineup)?.short,
       fType !== 'all' && (fType === '__none' ? '種類未設定' : fType), (fFrom || fTo) && `${fmtDate(fFrom)}〜${fmtDate(fTo)}`,
-      fSong && `曲「${fSong}」`, fVenue && `会場「${fVenue}」`, fCostume && `衣装「${fCostume}」`, fMember && `メンバー「${fMember}」`].filter(Boolean);
+      fSong && `曲「${fSong}」`, fVenue && `会場「${fVenue}」`, fCostume && `衣装「${fCostume}」`, fMember && `メンバー「${fMember}」`,
+      fFill !== 'all' && ({ setlist: 'セトリ書き込み済み', nosetlist: 'セトリ未書き込み', nocostume: '衣装 未書き込み' })[fFill]].filter(Boolean);
     $('filterSummary').textContent = (scope === 'all' ? '【グループ全体】' : '【自分が行ったライブ】') + (conds.length ? `条件: ${conds.join(' ／ ')}（${filtered().length}件）` : `すべて（${filtered().length}件）`);
     $('clearFilters').hidden = !conds.length;
     const ls = fGroup === 'all' ? [] : lineupsOfGroup(fGroup);
@@ -2224,6 +2235,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   $('groupFilter').addEventListener('change', e => { fGroup = e.target.value; fLineup = 'all'; renderAll(); });
   $('typeFilter').addEventListener('change', e => { fType = e.target.value; renderAll(); });
   $('kindFilter').addEventListener('change', e => { fKind = e.target.value; renderAll(); });
+  $('fillFilter').addEventListener('change', e => { fFill = e.target.value; renderAll(); });
   $('attFilter').addEventListener('change', e => { fAtt = e.target.value; renderAll(); });
   $('fromFilter').addEventListener('change', e => { fFrom = e.target.value; renderAll(); });
   $('toFilter').addEventListener('change', e => { fTo = e.target.value; renderAll(); });
@@ -2243,7 +2255,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     $(id).addEventListener('change', apply);
   });
   $('clearFilters').addEventListener('click', () => {
-    fYear = fGroup = fLineup = fType = fKind = fAtt = 'all'; fFrom = fTo = fSong = fVenue = fCostume = fMember = '';
+    fYear = fGroup = fLineup = fType = fKind = fAtt = fFill = 'all'; fFrom = fTo = fSong = fVenue = fCostume = fMember = '';
     ['fromFilter', 'toFilter', ...Object.keys(textFilters)].forEach(id => { $(id).value = ''; });
     renderAll();
   });
@@ -3812,6 +3824,10 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   // ================= バージョン・更新履歴 =================
   // 新しい機能を追加したら、いちばん上に1件足して番号を上げる
   const VERSIONS = [
+    { v: '3.4', date: '2026/11/16', items: [
+      '絞り込みに「書き込み状況」（セトリ書き込み済み・セトリ未書き込み・衣装 未書き込み）',
+      'セトリがまだないライブに「セトリ未記入」の印',
+    ] },
     { v: '3.3', date: '2026/11/16', items: [
       'TimeTreeの取り込みが終わったら、読み込んだ予定の一覧を消して最初の状態に戻す',
     ] },
