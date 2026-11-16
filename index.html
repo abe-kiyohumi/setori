@@ -724,15 +724,26 @@ body.scope-all .top { box-shadow: inset 0 -3px 0 var(--warn-soft); }
         </div>
         <div class="panel inset">
           <h3>Xアカウント</h3>
-          <p class="hint">このアカウントのツイートを読み込むと、このグループとして判別します。ツイートを読み込んで保存すると自動で覚えます。</p>
+          <p class="hint">このアカウントのツイートを読み込むと、このグループとして判別します。ツイートを読み込んで保存すると自動で覚えます。<b>セトリの検索と毎週の自動チェックは、ここに登録したアカウントの投稿だけを読み取ります</b>（公式・メンバー・運営など）。</p>
           <div id="lmAccounts" class="chips"></div>
           <div class="row"><div class="grow"><input id="lmAccountIn" class="field" placeholder="@アカウント名"></div><button type="button" id="lmAccountAdd" class="btn">追加</button></div>
         </div>
         <div class="panel inset">
           <h3>セトリ用ハッシュタグ</h3>
-          <p class="hint">「Xでセトリを探す」で検索するハッシュタグです（例：#手羽セトリ）。登録がないときはグループ名と「セトリ」で探します。</p>
+          <p class="hint">登録したアカウントの投稿のうち、このハッシュタグか下の「検索の言葉」を含むものを探します（例：#手羽セトリ）。</p>
           <div id="lmTags" class="chips"></div>
           <div class="row"><div class="grow"><input id="lmTagIn" class="field" placeholder="#ハッシュタグ"></div><button type="button" id="lmTagAdd" class="btn">追加</button></div>
+        </div>
+        <div class="panel inset">
+          <h3>セトリ検索の言葉</h3>
+          <p class="hint">登録したアカウントの投稿のうち、この言葉を含むものを探します（例：セトリ、セットリスト、M1）。ハッシュタグも言葉もないときは、登録したアカウントのその期間の投稿すべてを見ます。</p>
+          <div id="lmWords" class="chips"></div>
+          <div class="row"><div class="grow"><input id="lmWordIn" class="field" placeholder="言葉（「、」区切りで複数可）"></div><button type="button" id="lmWordAdd" class="btn">追加</button></div>
+        </div>
+        <div class="panel inset manage-wide">
+          <h3>Xの検索（確認用）</h3>
+          <p class="hint">上の登録内容から作る検索です。「Xでセトリを探す」と毎週の自動チェックはこの検索を使います。押すと直近7日分をXで開きます。</p>
+          <div id="lmQueries" style="display:flex;flex-direction:column;gap:6px"></div>
         </div>
         <div class="panel inset">
           <h3>TimeTreeカレンダー</h3>
@@ -900,7 +911,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   let liveLineup = new Map();       // ライブID → 体制key
 
   function emptyCandidates() {
-    return { venues: new Set(), groups: new Set(), liveTypes: new Set(DEFAULT_TYPES), member: new Map(), song: new Map(), costume: new Map(), cheki: new Map(), lineups: [], accounts: {}, mergeIgnore: [], timetree: { worker: '', cals: {} }, setoriTags: {} };
+    return { venues: new Set(), groups: new Set(), liveTypes: new Set(DEFAULT_TYPES), member: new Map(), song: new Map(), costume: new Map(), cheki: new Map(), lineups: [], accounts: {}, mergeIgnore: [], timetree: { worker: '', cals: {} }, setoriTags: {}, searchWords: {} };
   }
   function candToJSON(c) {
     const o = { venues: [...c.venues], groups: [...c.groups], liveTypes: [...c.liveTypes] };
@@ -909,6 +920,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     o.accounts = { ...c.accounts };
     o.mergeIgnore = [...(c.mergeIgnore || [])];
     o.setoriTags = Object.fromEntries(Object.entries(c.setoriTags || {}).map(([g, t]) => [g, [...t]]));
+    o.searchWords = Object.fromEntries(Object.entries(c.searchWords || {}).map(([g, t]) => [g, [...t]]));
     o.timetree = { worker: (c.timetree && c.timetree.worker) || '', cals: { ...((c.timetree && c.timetree.cals) || {}) } };
     return o;
   }
@@ -922,6 +934,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     c.accounts = o.accounts && typeof o.accounts === 'object' ? { ...o.accounts } : {};
     c.mergeIgnore = Array.isArray(o.mergeIgnore) ? [...o.mergeIgnore] : [];
     c.setoriTags = o.setoriTags && typeof o.setoriTags === 'object' ? Object.fromEntries(Object.entries(o.setoriTags).filter(([, t]) => Array.isArray(t)).map(([g, t]) => [g, [...t]])) : {};
+    c.searchWords = o.searchWords && typeof o.searchWords === 'object' ? Object.fromEntries(Object.entries(o.searchWords).filter(([, t]) => Array.isArray(t)).map(([g, t]) => [g, [...t]])) : {};
     const tt = o.timetree && typeof o.timetree === 'object' ? o.timetree : {};
     c.timetree = { worker: typeof tt.worker === 'string' ? tt.worker : '', cals: tt.cals && typeof tt.cals === 'object' ? { ...tt.cals } : {} };
     return c;
@@ -1827,8 +1840,28 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     return `<details class="ttinfo"><summary>TimeTreeの情報</summary>${info ? `<div class="memo">${linkify(info)}</div>` : ''}<a href="${esc(m.url)}" target="_blank" rel="noopener">TimeTreeで開く</a></details>`
       + (rest ? `<div class="memo">${linkify(rest)}</div>` : '');
   }
-  // X でセトリのハッシュタグを探すURL（日付があればその日と翌日の投稿に絞る）
+  // Xの検索：登録したアカウントの投稿（from:）のうち、ハッシュタグか検索の言葉を含むもの。アカウントが多いときは分けて複数の検索にする
+  const xWord = w => /[\s()]/.test(w) ? `"${w.replace(/"/g, '')}"` : w;
+  function xQueries(group, since, until) {
+    const accs = accountsOf(group);
+    if (!accs.length) return [];
+    const keys = [...(cand.setoriTags[group] || []).map(t => '#' + t), ...(cand.searchWords[group] || []).map(xWord)];
+    const kq = keys.length ? ' ' + (keys.length > 1 ? `(${keys.join(' OR ')})` : keys[0]) : '';
+    const dq = (since ? ` since:${since}` : '') + (until ? ` until:${until}` : '');
+    const out = [];
+    for (let i = 0; i < accs.length; i += 8) {
+      const part = accs.slice(i, i + 8).map(a => 'from:' + a);
+      out.push((part.length > 1 ? `(${part.join(' OR ')})` : part[0]) + kq + dq);
+    }
+    return out;
+  }
+  const xQueryURL = q => 'https://x.com/search?f=live&q=' + encodeURIComponent(q);
+  // X でセトリを探すURL（日付があればその日と翌日の投稿に絞る）。アカウントが登録されていれば、そのアカウントの投稿だけ
   function xSearchURL(group, date, only) {
+    if (!only && accountsOf(group).length) {
+      const ok = /^\d{4}-\d{2}-\d{2}$/.test(date || '');
+      return xQueryURL(xQueries(group, ok ? date : '', ok ? new Date(Date.parse(date + 'T00:00:00Z') + 2 * 86400000).toISOString().slice(0, 10) : '')[0]);
+    }
     const tags = (only ? [only] : (cand.setoriTags[group] || [])).map(t => '#' + t);
     let q = tags.length ? (tags.length > 1 ? `(${tags.join(' OR ')})` : tags[0]) : (group ? `"${group}" セトリ` : 'セトリ');
     if (/^\d{4}-\d{2}-\d{2}$/.test(date || '')) {
@@ -1854,15 +1887,16 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     $('xTagChips').innerHTML = groups.length ? groups.map(g => {
       const tags = cand.setoriTags[g] || [], accs = accountsOf(g);
       return `<div class="xtag-row${g === cur ? ' cur' : ''}"><span class="xtag-g">${esc(g)}</span>`
+        + (accs.length ? `<a class="chip" data-xg="${esc(g)}" href="${esc(xSearchURL(g, date))}" target="_blank" rel="noopener">登録アカウントでセトリ検索</a>` : '')
         + tags.map(t => `<a class="chip" data-xtag="${esc(t)}" data-g="${esc(g)}" href="${esc(xSearchURL(g, date, t))}" target="_blank" rel="noopener">#${esc(t)}</a>`).join('')
         + accs.map(a => `<a class="chip acc" data-xacc="${esc(a)}" href="${esc(xAccountURL(a, date))}" target="_blank" rel="noopener">@${esc(a)}</a>`).join('')
         + '</div>';
     }).join('') : '<span class="hint">セトリ用ハッシュタグやグループのXアカウントを登録すると、ここに一覧で出ます（候補の管理 → グループ・体制・メンバー）。</span>';
   }
   $('xTagChips').addEventListener('click', e => {
-    const a = e.target.closest('a[data-xtag], a[data-xacc]');
+    const a = e.target.closest('a[data-xtag], a[data-xacc], a[data-xg]');
     if (!a) return;
-    a.href = a.dataset.xacc ? xAccountURL(a.dataset.xacc, xTagDate()) : xSearchURL(a.dataset.g, xTagDate(), a.dataset.xtag);
+    a.href = a.dataset.xg ? xSearchURL(a.dataset.xg, xTagDate()) : a.dataset.xacc ? xAccountURL(a.dataset.xacc, xTagDate()) : xSearchURL(a.dataset.g, xTagDate(), a.dataset.xtag);
   });
   $('xTagDate').addEventListener('change', renderXTags);
   F.group.addEventListener('input', renderXTags); F.group.addEventListener('change', renderXTags); F.date.addEventListener('change', renderXTags);
@@ -2407,6 +2441,15 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     $('lmTags').innerHTML = tags.length
       ? tags.map(a => `<span class="chip">#${esc(a)}<button type="button" data-lmdeltag="${esc(a)}" aria-label="#${esc(a)}を削除">×</button></span>`).join('')
       : '<p class="empty">まだ登録されていません</p>';
+    const words = cand.searchWords[g] || [];
+    $('lmWords').innerHTML = words.length
+      ? words.map(a => `<span class="chip">${esc(a)}<button type="button" data-lmdelword="${esc(a)}" aria-label="${esc(a)}を削除">×</button></span>`).join('')
+      : '<p class="empty">まだ登録されていません</p>';
+    const today = todayStr(), wk = new Date(Date.parse(today + 'T00:00:00Z') - 7 * 86400000).toISOString().slice(0, 10);
+    const qs = xQueries(g, wk, new Date(Date.parse(today + 'T00:00:00Z') + 86400000).toISOString().slice(0, 10));
+    $('lmQueries').innerHTML = qs.length
+      ? qs.map(q => `<a class="btn sm" style="justify-content:flex-start;white-space:normal;text-align:left;overflow-wrap:anywhere" href="${esc(xQueryURL(q))}" target="_blank" rel="noopener">${esc(q)}</a>`).join('')
+      : '<p class="empty">Xアカウントを登録すると検索ができます（登録したアカウントの投稿だけを読み取るため）。</p>';
     const cals = calsOf(g);
     $('lmCals').innerHTML = cals.length
       ? cals.map(a => `<span class="chip">${esc(a)}<button type="button" data-lmdelcal="${esc(a)}" aria-label="${esc(a)}を削除">×</button></span>`).join('')
@@ -2421,6 +2464,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   }
   $('lmGroup').addEventListener('change', () => { resetLmForm(); renderLineupManage(); });
   $('lmTagIn').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) $('lmTagAdd').click(); });
+  $('lmWordIn').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) $('lmWordAdd').click(); });
   $('lmCalIn').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) $('lmCalAdd').click(); });
   $('lmAccountIn').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) $('lmAccountAdd').click(); });
   $('lmMemberIn').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) $('lmMemberAdd').click(); });
@@ -2447,6 +2491,22 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       const added = list.filter(x => !cur.includes(x));
       if (!added.length) return toast('すでに登録されています');
       cand.setoriTags[g] = [...cur, ...added]; $('lmTagIn').value = ''; Store.saveCandidates(); toast(`#${added.join('、#')} を登録しました`);
+      return;
+    }
+    if (t.id === 'lmWordAdd') {
+      const list = $('lmWordIn').value.split(/[、,，\n]+/).map(x => x.trim()).filter(Boolean);
+      if (!list.length) return toast('言葉を入力してください', 'error');
+      const cur = cand.searchWords[g] || [];
+      const added = list.filter(x => !cur.includes(x));
+      if (!added.length) return toast('すでに登録されています');
+      cand.searchWords[g] = [...cur, ...added]; $('lmWordIn').value = ''; Store.saveCandidates(); toast(`「${added.join('、')}」を検索の言葉に登録しました`);
+      return;
+    }
+    if (t.dataset.lmdelword) {
+      const a = t.dataset.lmdelword;
+      cand.searchWords[g] = (cand.searchWords[g] || []).filter(x => x !== a);
+      if (!cand.searchWords[g].length) delete cand.searchWords[g];
+      Store.saveCandidates(); toast(`「${a}」を外しました`);
       return;
     }
     if (t.dataset.lmdeltag) {
@@ -2770,6 +2830,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       Object.keys(cand.accounts).forEach(a => { if (F.has(cand.accounts[a])) cand.accounts[a] = to; });
       Object.keys(cand.timetree.cals).forEach(a => { if (F.has(cand.timetree.cals[a])) cand.timetree.cals[a] = to; });
       F.forEach(f => { if (f !== to && cand.setoriTags[f]) { cand.setoriTags[to] = [...new Set([...(cand.setoriTags[to] || []), ...cand.setoriTags[f]])]; delete cand.setoriTags[f]; } });
+      F.forEach(f => { if (f !== to && cand.searchWords[f]) { cand.searchWords[to] = [...new Set([...(cand.searchWords[to] || []), ...cand.searchWords[f]])]; delete cand.searchWords[f]; } });
     } else if (!isScoped(k)) {
       froms.forEach(f => cand[k].delete(f)); cand[k].add(to);
     } else {
@@ -2842,7 +2903,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       const pics = isGroup ? costumeImgs.filter(x => x.group === item) : k === 'costume' ? imgsOf(g, item) : [];
       if (!await confirmBox(`「${item}」を候補から削除しますか？${isGroup ? '（このグループの体制・メンバー・楽曲・衣装・チェキ相手の候補も消えます）' : ''}${pics.length ? `\n衣装の写真${pics.length}枚も削除されます。` : ''}`)) return;
       for (const x of pics) await Store.deleteCostumeImage(x.id);
-      if (isGroup) { cand.groups.delete(item); KINDS.forEach(kind => cand[kind].delete(item)); cand.lineups = cand.lineups.filter(l => l.group !== item); Object.keys(cand.accounts).forEach(a => { if (cand.accounts[a] === item) delete cand.accounts[a]; }); Object.keys(cand.timetree.cals).forEach(a => { if (cand.timetree.cals[a] === item) delete cand.timetree.cals[a]; }); delete cand.setoriTags[item]; }
+      if (isGroup) { cand.groups.delete(item); KINDS.forEach(kind => cand[kind].delete(item)); cand.lineups = cand.lineups.filter(l => l.group !== item); Object.keys(cand.accounts).forEach(a => { if (cand.accounts[a] === item) delete cand.accounts[a]; }); Object.keys(cand.timetree.cals).forEach(a => { if (cand.timetree.cals[a] === item) delete cand.timetree.cals[a]; }); delete cand.setoriTags[item]; delete cand.searchWords[item]; }
       else if (isScoped(k)) cand[k].get(g)?.delete(item);
       else cand[k].delete(item);
       await Store.saveCandidates();
@@ -3630,6 +3691,11 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   // ================= バージョン・更新履歴 =================
   // 新しい機能を追加したら、いちばん上に1件足して番号を上げる
   const VERSIONS = [
+    { v: '2.6', date: '2026/11/16', items: [
+      '候補の管理に「セトリ検索の言葉」と「Xの検索（確認用）」を追加（サイトから検索の内容を管理）',
+      'セトリの検索を「登録したアカウントの投稿（from検索）のうち、ハッシュタグか検索の言葉を含むもの」に変更',
+      '自動チェックは登録したアカウントのツイートだけを読み取るように',
+    ] },
     { v: '2.5', date: '2026/11/16', items: [
       '「確認待ち」タブ：毎週の自動チェックで見つけたセトリを確認して確定（フォームで修正も可）',
       '自動チェック用に、セトリ用ハッシュタグと登録したグループのアカウントのツイートから探せるように',
@@ -3923,17 +3989,14 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     // 登録内容（グループ・TimeTreeカレンダー・セトリ用ハッシュタグ・Xアカウント）
     config() {
       const groups = [...new Set([...Object.values(cand.timetree.cals || {}), ...Object.keys(cand.setoriTags || {}), ...Object.values(cand.accounts || {})])].filter(Boolean).sort((a, b) => a.localeCompare(b, 'ja'));
-      return { worker: cand.timetree.worker || '', groups: groups.map(g => ({ group: g, cals: calsOf(g), tags: [...(cand.setoriTags[g] || [])], accounts: accountsOf(g) })) };
+      return { worker: cand.timetree.worker || '', groups: groups.map(g => ({ group: g, cals: calsOf(g), tags: [...(cand.setoriTags[g] || [])], words: [...(cand.searchWords[g] || [])], accounts: accountsOf(g) })) };
     },
-    // Xの検索URL（グループごと：ハッシュタグ／登録アカウントの投稿）。from〜to はライブの日付。投稿は翌日までを含める
+    // そのアカウントが登録されているグループ（未登録なら ''）
+    groupOfAccount: a => groupOfAccount(normAcc(a)),
+    // Xの検索URL（グループごと・登録アカウントの投稿のうちハッシュタグか検索の言葉を含むもの）。from〜to はライブの日付。投稿は翌日までを含める
     searchUrls(from, to) {
       const until = plus1(plus1(to));
-      return this.config().groups.flatMap(g => {
-        const out = [];
-        if (g.tags.length) { const q = g.tags.map(t => '#' + t).join(' OR '); out.push({ group: g.group, kind: 'hashtag', url: 'https://x.com/search?f=live&q=' + encodeURIComponent(`${g.tags.length > 1 ? `(${q})` : q} since:${from} until:${until}`) }); }
-        if (g.accounts.length) { const q = g.accounts.map(a => 'from:' + a).join(' OR '); out.push({ group: g.group, kind: 'account', url: 'https://x.com/search?f=live&q=' + encodeURIComponent(`${g.accounts.length > 1 ? `(${q})` : q} since:${from} until:${until}`) }); }
-        return out;
-      });
+      return this.config().groups.flatMap(g => xQueries(g.group, from, until).map(q => ({ group: g.group, query: q, url: xQueryURL(q) })));
     },
     // 記録済みのライブ（from〜to）
     lives(from, to) {
@@ -3973,7 +4036,8 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     async tweet(url) {
       const info = await fetchTweetInfo(String(url || '').split('?')[0]);
       const fromUrl = normAcc((String(url).match(/(?:x|twitter)\.com\/([^/]+)\/status/i) || [])[1]);
-      return { url: String(url).split('?')[0], text: info.text || '', date: info.date || '', account: fromUrl && fromUrl !== 'i' ? fromUrl : normAcc(info.authorUrl), ok: !!info.text };
+      const account = normAcc(info.authorUrl) || (fromUrl !== 'i' ? fromUrl : '');
+      return { url: String(url).split('?')[0], text: info.text || '', date: info.date || '', account, group: groupOfAccount(account), ok: !!info.text };
     },
     pending: () => clone(pendingData),
     // 確認待ちに追加。同じツイート・同じTimeTree予定がすでにあるもの（却下済みも含む）、セトリ記録済みのライブは飛ばす
@@ -3995,6 +4059,9 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
           tweets: (it.tweets || []).filter(t => t && tweetId(t.url)).map(t => ({ url: String(t.url).split('?')[0], text: String(t.text || '').slice(0, 2000), account: normAcc(t.account || ''), date: t.date || '' })),
           reason: it.reason || '',
         };
+        // 登録したアカウント（このグループ）のツイートだけを使う
+        p.tweets = p.tweets.filter(t => t.account && groupOfAccount(t.account) === p.group);
+        if (!p.tweets.length) { why('このグループに登録したアカウントのツイートがありません'); continue; }
         if (!pendParts(p).some(x => splitSongs(x.setlist).length)) { why('セットリストがありません'); continue; }
         if (p.tweets.some(t => usedUrls.has(tweetId(t.url)))) { why('同じツイートが確認待ち（または却下済み）にあります'); continue; }
         if (p.timetree && usedTT.has(p.timetree.id)) { why('同じTimeTreeの予定が確認待ち（または却下済み）にあります'); continue; }
