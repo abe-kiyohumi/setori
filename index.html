@@ -1153,7 +1153,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
           pendingData = snap.docs.map(d => ({ ...d.data(), id: d.id }));
           renderAll();
         }, writeError));
-        this.unsubs.push(onSnapshot(doc(fs, 'users', user.uid, 'meta', 'candidates'), s => {
+        this.unsubs.push(onSnapshot(doc(fs, 'users', user.uid, 'meta', 'candidates'), { includeMetadataChanges: true }, s => {
           cand = candFromJSON(s.exists() ? s.data() : null);
           if (!s.metadata || !s.metadata.fromCache) this.loaded.cand = true;
           renderAll();
@@ -3854,6 +3854,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     { v: '3.8', date: '2026/11/18', items: [
       'TimeTreeの予定・記録済みのライブがない日でも、登録アカウントのツイートにセトリがあれば確認待ちに入れる',
       '確認待ちを「TimeTreeの候補あり／なし」で絞り込み・カードに目印',
+      '自動チェックの「読み込み完了」の判定を修正',
     ] },
     { v: '3.7', date: '2026/11/18', items: [
       '確認待ちをグループ・月・書き込み先・文字（ライブ名・会場・曲）・ステージ数で絞り込めるように',
