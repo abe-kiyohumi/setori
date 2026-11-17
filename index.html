@@ -1486,13 +1486,13 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       if (t && (t.text || t.raw_text?.text)) {
         const q = t.quote;
         const quote = q && (q.text || q.raw_text?.text) && q.author?.screen_name ? { url: q.url || `https://x.com/${q.author.screen_name}/status/${q.id}`, text: cleanTweetText(q.text || q.raw_text.text), date: q.created_timestamp ? ymd(q.created_timestamp) : '', account: normAcc(q.author.screen_name) } : null;
-        return { text: cleanTweetText(t.text || t.raw_text.text), date: t.created_timestamp ? ymd(t.created_timestamp) : '', author: t.author?.name || '', authorUrl: t.author?.screen_name ? `https://x.com/${t.author.screen_name}` : '', source: 'fx', quote };
+        return { at: t.created_timestamp || 0, text: cleanTweetText(t.text || t.raw_text.text), date: t.created_timestamp ? ymd(t.created_timestamp) : '', author: t.author?.name || '', authorUrl: t.author?.screen_name ? `https://x.com/${t.author.screen_name}` : '', source: 'fx', quote };
       }
       const vx = await getJSON(`https://api.vxtwitter.com/${encodeURIComponent(user)}/status/${id}`);
       if (vx && vx.text) {
         const q = vx.qrt;
         const quote = q && q.text && q.user_screen_name ? { url: q.tweetURL || `https://x.com/${q.user_screen_name}/status/${q.tweetID}`, text: cleanTweetText(q.text), date: q.date_epoch ? ymd(q.date_epoch) : '', account: normAcc(q.user_screen_name) } : null;
-        return { text: cleanTweetText(vx.text), date: vx.date_epoch ? ymd(vx.date_epoch) : '', author: vx.user_name || '', authorUrl: vx.user_screen_name ? `https://x.com/${vx.user_screen_name}` : '', source: 'vx', quote };
+        return { at: vx.date_epoch || 0, text: cleanTweetText(vx.text), date: vx.date_epoch ? ymd(vx.date_epoch) : '', author: vx.user_name || '', authorUrl: vx.user_screen_name ? `https://x.com/${vx.user_screen_name}` : '', source: 'vx', quote };
       }
     }
     return fetchTweetOembed(url);
@@ -3289,7 +3289,22 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
 
     // 7) ライブ名・種類
     const firstSong = songLines.length ? songLines[0].i : lines.length;
-    let liveName = label.liveName || headerName || nameFromVenueLine || '';
+    const hasWord = x => /[\p{L}\p{N}]/u.test(x || '');
+    let liveName = [label.liveName, headerName, nameFromVenueLine].find(hasWord) || '';
+    if (!liveName) {
+      // お礼の文（「〇〇」ありがとうございました／#〇〇 ありがとうございました）からライブ名を読む。セトリより前の行だけ
+      const raw = String(text || '').split('\n').map(l => l.trim());
+      const firstSongRaw = raw.findIndex(l => SONG_PATTERNS.some(re => re.test(l)) && !NOT_SONG.test(l));
+      const head = (firstSongRaw < 0 ? raw : raw.slice(0, firstSongRaw)).filter(Boolean);
+      for (let i = 0; i < head.length && !liveName; i++) {
+        const near = head.slice(i, i + 3).join(' ');
+        if (!/ありがと|お越し|ご来場|来てくれ|楽しかった/.test(near)) continue;
+        const br = head[i].match(/[「『｢]([^」』｣]{2,60})[」』｣]/);
+        if (br) { liveName = br[1].trim(); break; }
+        const tag = head[i].match(/^[#＃]([^\s#＃]{2,60})/);
+        if (tag && !/セトリ|setlist/i.test(tag[1]) && !(r.group && norm(tag[1]) === norm(r.group))) liveName = tag[1].replace(/_/g, ' ');
+      }
+    }
     if (!liveName) {
       for (let i = 0; i < firstSong; i++) {
         if (used.has(i)) continue;
@@ -3855,6 +3870,8 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       'TimeTreeの予定・記録済みのライブがない日でも、登録アカウントのツイートにセトリがあれば確認待ちに入れる',
       '確認待ちを「TimeTreeの候補あり／なし」で絞り込み・カードに目印',
       '自動チェックの「読み込み完了」の判定を修正',
+      'お礼の文（「〇〇」ありがとうございました・#〇〇 ありがとうございました）からライブ名を読む',
+      '日付が書かれていない深夜（0〜5時）の投稿は前の日のライブとして扱う',
     ] },
     { v: '3.7', date: '2026/11/18', items: [
       '確認待ちをグループ・月・書き込み先・文字（ライブ名・会場・曲）・ステージ数で絞り込めるように',
@@ -4259,7 +4276,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       const q = info.quote;
       // 引用元は、登録アカウント（引用した側と同じグループ）の投稿のときだけ返す
       const quote = q && quoteAllowed(account, q) ? { ...q, group: groupOfAccount(q.account) } : null;
-      return { url: String(url).split('?')[0], text: info.text || '', date: info.date || '', account, group: groupOfAccount(account), ok: !!info.text, quote, quoteSkipped: !!(q && !quote) };
+      return { url: String(url).split('?')[0], text: info.text || '', date: info.date || '', at: info.at || 0, account, group: groupOfAccount(account), ok: !!info.text, quote, quoteSkipped: !!(q && !quote) };
     },
     // 読み込んだツイート（tweet() の結果の配列）を、TimeTreeの予定・記録済みのライブと照らし合わせる
     //  返り値：{ items: addPending にそのまま渡せるもの, report: 1件ずつの結果 }
@@ -4295,6 +4312,8 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
         }
         rep.date = liveDate;
         if (!cs.length) {
+          // 日付が書かれていない深夜（0〜5時）の投稿は、前の日のライブ
+          if (!explicit && tw.at && new Date((tw.at + 9 * 3600) * 1000).getUTCHours() < 5) { liveDate = shift(liveDate, -1); rep.date = liveDate; }
           if (liveDate < from || liveDate > to) { report.push({ ...rep, status: '期間外の日付' }); continue; }
           const secs0 = r.sections || [];
           items.push({
@@ -4333,6 +4352,13 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       return { items: [...byKey.values()], report, ttErrors: ttr.errors };
     },
     pending: () => clone(pendingData),
+    // 自動チェックで入れた確認待ちを消す（やり直し用）
+    async removePending(ids) {
+      const set = new Set([].concat(ids || []));
+      const list = pendingData.filter(p => set.has(p.id) && p.source === 'auto');
+      for (const p of list) await Store.deletePending(p.id);
+      return list.length;
+    },
     // 確認待ちに追加。同じツイート・同じTimeTree予定がすでにあるもの（却下済みも含む）、セトリ記録済みのライブは飛ばす
     async addPending(items) {
       if (!Store.uid) throw new Error('ログインしていません');
