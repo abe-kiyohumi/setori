@@ -560,6 +560,7 @@ body.scope-all .top { box-shadow: inset 0 -3px 0 var(--warn-soft); }
       <div class="grid2">
         <div><label class="lbl" for="pfGroup">グループ</label><select id="pfGroup" class="field"><option value="all">すべて</option></select></div>
         <div><label class="lbl" for="pfMonth">月</label><select id="pfMonth" class="field"><option value="all">すべて</option></select></div>
+        <div><label class="lbl" for="pfTT">TimeTreeの候補</label><select id="pfTT" class="field"><option value="all">すべて</option><option value="tt">あり（TimeTreeの予定と一致）</option><option value="none">なし（ツイートだけから作った候補）</option></select></div>
         <div><label class="lbl" for="pfTarget">書き込み先</label><select id="pfTarget" class="field"><option value="all">すべて</option><option value="live">記録済みのライブに追加</option><option value="over">記録済み（セトリあり）に上書き</option><option value="new">新しいライブとして作成</option></select></div>
         <div><label class="lbl" for="pfText">ライブ名・会場・曲</label><input id="pfText" class="field" placeholder="文字の一部で絞り込む"></div>
       </div>
@@ -3850,6 +3851,10 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   // ================= バージョン・更新履歴 =================
   // 新しい機能を追加したら、いちばん上に1件足して番号を上げる
   const VERSIONS = [
+    { v: '3.8', date: '2026/11/18', items: [
+      'TimeTreeの予定・記録済みのライブがない日でも、登録アカウントのツイートにセトリがあれば確認待ちに入れる',
+      '確認待ちを「TimeTreeの候補あり／なし」で絞り込み・カードに目印',
+    ] },
     { v: '3.7', date: '2026/11/18', items: [
       '確認待ちをグループ・月・書き込み先・文字（ライブ名・会場・曲）・ステージ数で絞り込めるように',
     ] },
@@ -4059,16 +4064,17 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     const fill = (id, vals, fmt) => { const sel = $(id), keep = sel.value; sel.innerHTML = '<option value="all">すべて</option>' + vals.map(v => `<option value="${esc(v)}">${esc(fmt(v))}</option>`).join(''); sel.value = vals.includes(keep) ? keep : 'all'; };
     fill('pfGroup', sortJa(new Set(all.map(p => p.group).filter(Boolean))), v => `${v}（${all.filter(p => p.group === v).length}）`);
     fill('pfMonth', [...new Set(all.map(p => (p.date || '').slice(0, 7)).filter(Boolean))].sort().reverse(), v => `${v.replace('-', '年')}月（${all.filter(p => (p.date || '').startsWith(v)).length}）`);
-    const fg = $('pfGroup').value, fm = $('pfMonth').value, ft = $('pfTarget').value, fq = $('pfText').value.trim(), fmul = $('pfMulti').checked;
+    const fg = $('pfGroup').value, fm = $('pfMonth').value, ft = $('pfTarget').value, fq = $('pfText').value.trim(), fmul = $('pfMulti').checked, ftt = $('pfTT').value;
+    const pendTT = p => !!(p.timetree && p.timetree.id);
     const kindOfPend = p => { const t = pendTarget(p); return t.live ? (hasSetlist(t.live) ? 'over' : 'live') : 'new'; };
     const open = all.filter(p => (fg === 'all' || p.group === fg) && (fm === 'all' || (p.date || '').startsWith(fm))
-      && (ft === 'all' || kindOfPend(p) === ft) && (!fmul || pendParts(p).length > 1)
+      && (ftt === 'all' || (ftt === 'tt') === pendTT(p)) && (ft === 'all' || kindOfPend(p) === ft) && (!fmul || pendParts(p).length > 1)
       && (!fq || norm([p.liveName, p.venue, p.timetree && p.timetree.title, p.timetree && p.timetree.venue, ...pendParts(p).map(x => x.label + ' ' + x.costume + ' ' + x.setlist)].join(' ')).includes(norm(fq))))
       .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (a.group || '').localeCompare(b.group || '', 'ja'));
     const rej = pendingData.filter(p => p.status === 'rejected').sort((a, b) => (b.date || '').localeCompare(a.date || ''));
     const badge = $('pendingBadge');
     badge.hidden = !all.length; badge.textContent = all.length;
-    const filtering = fg !== 'all' || fm !== 'all' || ft !== 'all' || fq || fmul;
+    const filtering = ftt !== 'all' || fg !== 'all' || fm !== 'all' || ft !== 'all' || fq || fmul;
     $('pfClear').hidden = !filtering;
     $('pendingSummary').textContent = !all.length ? '確認待ちはありません。' : filtering ? `${all.length}件中 ${open.length}件を表示しています。` : `${all.length}件の確認待ちがあります。`;
     const card = (p, rejected) => {
@@ -4084,7 +4090,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
         ? `<button type="button" class="btn sm" data-pend="restore" data-id="${esc(p.id)}">確認待ちに戻す</button><button type="button" class="btn sm danger" data-pend="purge" data-id="${esc(p.id)}">消す</button>`
         : `<button type="button" class="btn sm primary" data-pend="ok" data-id="${esc(p.id)}">確定</button><button type="button" class="btn sm" data-pend="form" data-id="${esc(p.id)}">フォームで確認・修正</button><button type="button" class="btn sm danger" data-pend="reject" data-id="${esc(p.id)}">却下</button>`;
       return `<article class="pend${rejected ? ' rejected' : ''}">
-        <div class="head"><span><span class="sub">${esc(fmtDate(p.date))}</span>　<span class="name">${esc(name)}</span></span>${tgt}</div>
+        <div class="head"><span><span class="sub">${esc(fmtDate(p.date))}</span>　<span class="name">${esc(name)}</span></span><span class="row" style="gap:4px">${p.timetree && p.timetree.id ? '<span class="target">TimeTreeの予定あり</span>' : '<span class="target warn">TimeTreeの予定なし</span>'}${tgt}</span></div>
         <span class="sub"><b>${esc(p.group || '—')}</b> ／ ${esc(venue || '会場未記録')}${p.liveType ? ` ／ ${esc(p.liveType)}` : ''}${!multi && p.costume ? ` ／ 衣装: ${esc(p.costume)}` : ''}${(p.members || []).length ? ` ／ メンバー: ${esc(p.members.join('、'))}` : ''}</span>
         ${rejected ? '' : `<details${n <= 30 ? ' open' : ''}><summary class="sub" style="cursor:pointer">セットリスト（${n}曲）</summary>${songs}</details>`}
         ${(p.tweets || []).length ? `<div class="tw">${p.tweets.map(x => `<div><a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.account ? '@' + x.account : 'ツイート')}${x.date ? ' ' + esc(fmtDate(x.date)) : ''}</a></div>`).join('')}</div>` : ''}
@@ -4165,9 +4171,9 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     toast('内容を確認して「保存する」を押すと記録され、確認待ちから消えます');
   }
 
-  ['pfGroup', 'pfMonth', 'pfTarget', 'pfMulti'].forEach(id => $(id).addEventListener('change', renderPending));
+  ['pfGroup', 'pfMonth', 'pfTarget', 'pfMulti', 'pfTT'].forEach(id => $(id).addEventListener('change', renderPending));
   $('pfText').addEventListener('input', renderPending);
-  $('pfClear').addEventListener('click', () => { ['pfGroup', 'pfMonth', 'pfTarget'].forEach(id => { $(id).value = 'all'; }); $('pfText').value = ''; $('pfMulti').checked = false; renderPending(); });
+  $('pfClear').addEventListener('click', () => { ['pfGroup', 'pfMonth', 'pfTarget', 'pfTT'].forEach(id => { $(id).value = 'all'; }); $('pfText').value = ''; $('pfMulti').checked = false; renderPending(); });
   $('tab-pending').addEventListener('click', async e => {
     const b = e.target.closest('[data-pend]');
     if (b) {
@@ -4287,7 +4293,20 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
           if (prev.length) { cs = prev; if (!explicit) liveDate = shift(date, -1); }
         }
         rep.date = liveDate;
-        if (!cs.length) { report.push({ ...rep, status: '同じ日の予定・記録がない' }); continue; }
+        if (!cs.length) {
+          if (liveDate < from || liveDate > to) { report.push({ ...rep, status: '期間外の日付' }); continue; }
+          const secs0 = r.sections || [];
+          items.push({
+            date: liveDate, group: tw.group, liveId: '', timetree: null, ttMatch: 'none',
+            liveName: r.liveName || (q && q.liveName) || '', liveType: r.liveType || (q && q.liveType) || '', venue: r.venue || (q && q.venue) || '', costume: r.costume || '',
+            setlist: secs0.length > 1 ? [] : r.songs, parts: secs0.length > 1 ? secs0.map(x => ({ label: x.label, costume: x.costume, setlist: x.songs })) : undefined,
+            members: r.members || [],
+            tweets: [{ url: tw.url, text: tw.text, account: tw.account, date: tw.date }, ...(tw.quote ? [{ url: tw.quote.url, text: tw.quote.text, account: tw.quote.account, date: tw.quote.date }] : [])],
+            reason: `TimeTreeの予定・記録済みのライブはありませんが、@${tw.account} のツイートにセトリ（${liveDate}）がありました`,
+          });
+          report.push({ ...rep, status: `TimeTreeの予定なしで候補に${secs0.length > 1 ? `・${secs0.length}ステージ` : ''}`, songs: r.songs.length });
+          continue;
+        }
         let pick = null;
         if (cs.length === 1 || cs.every(c => N(c.name) === N(cs[0].name))) pick = cs.find(c => c.liveId) || cs[0];
         else { const sc = cs.map(c => [c, score(c, text)]).sort((a, b) => b[1] - a[1]); if (sc[0][1] > 0 && sc[0][1] > sc[1][1]) pick = sc[0][0]; }
@@ -4295,7 +4314,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
         if (pick.hasSetlist) { report.push({ ...rep, status: `セトリ記録済み（${pick.name}）` }); continue; }
         const secs = r.sections || [];
         items.push({
-          date: liveDate, group: tw.group, liveId: pick.liveId || '',
+          date: liveDate, group: tw.group, liveId: pick.liveId || '', ttMatch: pick.tt ? 'tt' : 'live',
           timetree: pick.tt ? { id: pick.tt.id, alias: pick.tt.alias, title: pick.tt.title, venue: pick.tt.venue, time: pick.tt.time, note: pick.tt.note, url: pick.tt.url } : null,
           liveName: r.liveName || (q && q.liveName) || '', liveType: r.liveType || (q && q.liveType) || '', venue: r.venue || (q && q.venue) || '', costume: r.costume || '',
           setlist: secs.length > 1 ? [] : r.songs, parts: secs.length > 1 ? secs.map(x => ({ label: x.label, costume: x.costume, setlist: x.songs })) : undefined,
@@ -4307,7 +4326,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
       }
       // 同じライブに複数のセトリツイートがあるときは、曲がいちばん多いものを使い、ほかのツイートはリンクとして加える
       const byKey = new Map();
-      items.forEach(it => { const k = (it.timetree && it.timetree.id) || it.liveId || it.date + it.group; const cur = byKey.get(k);
+      items.forEach(it => { const k = (it.timetree && it.timetree.id) || it.liveId || (it.ttMatch === 'none' ? 'none|' + it.date + it.group + '|' + (N(it.liveName) || it.tweets[0].url) : it.date + it.group); const cur = byKey.get(k);
         const n = x => (x.parts ? x.parts.reduce((a, p) => a + p.setlist.length, 0) : x.setlist.length);
         if (!cur) byKey.set(k, it); else { const [keep, drop] = n(it) > n(cur) ? [it, cur] : [cur, it]; keep.tweets = [...keep.tweets, ...drop.tweets.filter(t => !keep.tweets.some(x => x.url === t.url))]; byKey.set(k, keep); } });
       return { items: [...byKey.values()], report, ttErrors: ttr.errors };
@@ -4330,7 +4349,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
           parts: Array.isArray(it.parts) ? it.parts.map(x => ({ label: x.label || '', costume: x.costume || '', setlist: Array.isArray(x.setlist) ? x.setlist.join('\n') : (x.setlist || '') })) : [],
           members: Array.isArray(it.members) ? it.members : [],
           tweets: (it.tweets || []).filter(t => t && tweetId(t.url)).map(t => ({ url: String(t.url).split('?')[0], text: String(t.text || '').slice(0, 2000), account: normAcc(t.account || ''), date: t.date || '' })),
-          reason: it.reason || '',
+          reason: it.reason || '', ttMatch: it.ttMatch || (it.timetree && it.timetree.id ? 'tt' : it.liveId ? 'live' : 'none'),
         };
         // 登録したアカウント（このグループ）のツイートだけを使う
         p.tweets = p.tweets.filter(t => t.account && groupOfAccount(t.account) === p.group);
