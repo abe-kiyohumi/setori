@@ -557,7 +557,14 @@ body.scope-all .top { box-shadow: inset 0 -3px 0 var(--warn-soft); }
     <div class="panel">
       <h2>確認待ちのセトリ</h2>
       <p class="hint">毎週の自動チェックで、TimeTreeの予定とXのツイート（セトリ用ハッシュタグ・登録したグループのアカウント）を照らし合わせて見つけたセトリです。まだライブ一覧には入っていません。内容を確認して「確定」すると記録されます。直したいときは「フォームで確認・修正」を押してください。</p>
-      <p id="pendingSummary" class="hint"></p>
+      <div class="grid2">
+        <div><label class="lbl" for="pfGroup">グループ</label><select id="pfGroup" class="field"><option value="all">すべて</option></select></div>
+        <div><label class="lbl" for="pfMonth">月</label><select id="pfMonth" class="field"><option value="all">すべて</option></select></div>
+        <div><label class="lbl" for="pfTarget">書き込み先</label><select id="pfTarget" class="field"><option value="all">すべて</option><option value="live">記録済みのライブに追加</option><option value="over">記録済み（セトリあり）に上書き</option><option value="new">新しいライブとして作成</option></select></div>
+        <div><label class="lbl" for="pfText">ライブ名・会場・曲</label><input id="pfText" class="field" placeholder="文字の一部で絞り込む"></div>
+      </div>
+      <label class="hint"><input type="checkbox" id="pfMulti"> ステージが2つ以上のものだけ</label>
+      <div class="row" style="align-items:center;justify-content:space-between"><p id="pendingSummary" class="hint"></p><button type="button" id="pfClear" class="btn sm" hidden>条件をクリア</button></div>
     </div>
     <div id="pendingList" class="lives"></div>
     <details id="rejectedBox" class="panel inset" hidden>
@@ -3843,6 +3850,9 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   // ================= バージョン・更新履歴 =================
   // 新しい機能を追加したら、いちばん上に1件足して番号を上げる
   const VERSIONS = [
+    { v: '3.7', date: '2026/11/18', items: [
+      '確認待ちをグループ・月・書き込み先・文字（ライブ名・会場・曲）・ステージ数で絞り込めるように',
+    ] },
     { v: '3.6', date: '2026/11/16', items: [
       '自動チェックは、サーバーからデータを読み込み終わってから始めるように',
     ] },
@@ -4044,11 +4054,23 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
   }
 
   function renderPending() {
-    const open = pendingData.filter(p => p.status !== 'rejected').sort((a, b) => (b.date || '').localeCompare(a.date || '') || (a.group || '').localeCompare(b.group || '', 'ja'));
+    const all = pendingData.filter(p => p.status !== 'rejected');
+    // 絞り込みの選択肢（グループ・月）
+    const fill = (id, vals, fmt) => { const sel = $(id), keep = sel.value; sel.innerHTML = '<option value="all">すべて</option>' + vals.map(v => `<option value="${esc(v)}">${esc(fmt(v))}</option>`).join(''); sel.value = vals.includes(keep) ? keep : 'all'; };
+    fill('pfGroup', sortJa(new Set(all.map(p => p.group).filter(Boolean))), v => `${v}（${all.filter(p => p.group === v).length}）`);
+    fill('pfMonth', [...new Set(all.map(p => (p.date || '').slice(0, 7)).filter(Boolean))].sort().reverse(), v => `${v.replace('-', '年')}月（${all.filter(p => (p.date || '').startsWith(v)).length}）`);
+    const fg = $('pfGroup').value, fm = $('pfMonth').value, ft = $('pfTarget').value, fq = $('pfText').value.trim(), fmul = $('pfMulti').checked;
+    const kindOfPend = p => { const t = pendTarget(p); return t.live ? (hasSetlist(t.live) ? 'over' : 'live') : 'new'; };
+    const open = all.filter(p => (fg === 'all' || p.group === fg) && (fm === 'all' || (p.date || '').startsWith(fm))
+      && (ft === 'all' || kindOfPend(p) === ft) && (!fmul || pendParts(p).length > 1)
+      && (!fq || norm([p.liveName, p.venue, p.timetree && p.timetree.title, p.timetree && p.timetree.venue, ...pendParts(p).map(x => x.label + ' ' + x.costume + ' ' + x.setlist)].join(' ')).includes(norm(fq))))
+      .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (a.group || '').localeCompare(b.group || '', 'ja'));
     const rej = pendingData.filter(p => p.status === 'rejected').sort((a, b) => (b.date || '').localeCompare(a.date || ''));
     const badge = $('pendingBadge');
-    badge.hidden = !open.length; badge.textContent = open.length;
-    $('pendingSummary').textContent = open.length ? `${open.length}件の確認待ちがあります。` : '確認待ちはありません。';
+    badge.hidden = !all.length; badge.textContent = all.length;
+    const filtering = fg !== 'all' || fm !== 'all' || ft !== 'all' || fq || fmul;
+    $('pfClear').hidden = !filtering;
+    $('pendingSummary').textContent = !all.length ? '確認待ちはありません。' : filtering ? `${all.length}件中 ${open.length}件を表示しています。` : `${all.length}件の確認待ちがあります。`;
     const card = (p, rejected) => {
       const t = pendTarget(p), parts = pendParts(p), multi = parts.length > 1;
       const tgt = t.live
@@ -4070,7 +4092,7 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
         <div class="row">${btns}</div>
       </article>`;
     };
-    $('pendingList').innerHTML = open.length ? open.map(p => card(p, false)).join('') : '<div class="panel"><p class="empty">確認待ちのセトリはありません。毎週の自動チェックで見つかると、ここに出ます。</p></div>';
+    $('pendingList').innerHTML = open.length ? open.map(p => card(p, false)).join('') : filtering ? '<div class="panel"><p class="empty">条件に合う確認待ちはありません。</p></div>' : '<div class="panel"><p class="empty">確認待ちのセトリはありません。毎週の自動チェックで見つかると、ここに出ます。</p></div>';
     $('rejectedBox').hidden = !rej.length;
     $('rejectedTitle').textContent = `却下したもの（${rej.length}件）`;
     $('rejectedList').innerHTML = rej.map(p => card(p, true)).join('');
@@ -4143,6 +4165,9 @@ const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabMana
     toast('内容を確認して「保存する」を押すと記録され、確認待ちから消えます');
   }
 
+  ['pfGroup', 'pfMonth', 'pfTarget', 'pfMulti'].forEach(id => $(id).addEventListener('change', renderPending));
+  $('pfText').addEventListener('input', renderPending);
+  $('pfClear').addEventListener('click', () => { ['pfGroup', 'pfMonth', 'pfTarget'].forEach(id => { $(id).value = 'all'; }); $('pfText').value = ''; $('pfMulti').checked = false; renderPending(); });
   $('tab-pending').addEventListener('click', async e => {
     const b = e.target.closest('[data-pend]');
     if (b) {
